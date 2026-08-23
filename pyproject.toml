@@ -5,24 +5,23 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "artifactproof"
 version = "0.1.0"
-description = "Offline, hash-bound QA receipts for generated artifacts"
+description = "Verify offline that a PowerPoint presentation still matches its HMAC-signed structural QA receipt"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 dependencies = []
 keywords = [
-  "artifact-integrity",
   "artifact-verification",
+  "checksum",
   "file-integrity",
   "hmac",
   "offline-verification",
   "powerpoint",
-  "quality-assurance",
   "pptx",
   "pptx-validation",
-  "receipts",
-  "supply-chain-security",
+  "qa-evidence",
+  "sha256",
   "tamper-evident",
 ]
 classifiers = [

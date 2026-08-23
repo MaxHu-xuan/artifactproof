@@ -1,28 +1,53 @@
 # ArtifactProof（交付物验真）
 
-[中文说明](#中文说明) · [English Overview](#english-overview) · [Technical reference](#technical-reference)
+[![CI](https://github.com/MaxHu-xuan/artifactproof/actions/workflows/ci.yml/badge.svg)](https://github.com/MaxHu-xuan/artifactproof/actions/workflows/ci.yml)
+
+[中文说明](#中文说明) · [English overview](#english-overview) · [Technical reference](#technical-reference)
 
 ## 中文说明
 
-ArtifactProof 帮助个人和团队确认：最终交付的 PowerPoint 文件，是否就是之前检查通过的
-那一份。它在本地离线运行，为 PPTX 文件生成与文件内容绑定的验真收据；稍后再次验证时，
-只要演示文稿或配套证据发生变化，验证就会失败。
+### ArtifactProof 解决什么问题？
 
-如果你正在寻找离线 PPTX 结构校验、PowerPoint 文件验真、防篡改质量凭证或生成式文件
-证据绑定工具，ArtifactProof 面向的就是这一类明确需求。
+一份 PPTX 通过检查后，可能还要经历审批、重命名、上传、下载和转发。到了真正交付时，
+怎样确认它仍是当时检查过的那一份？
 
-### 适合这些场景
+ArtifactProof 是一个本地、离线的 PowerPoint（.pptx）交付物验真工具。它不依赖文件名或
+修改时间，而是根据文件内容计算 SHA-256 校验值，把结构检查结果和外部质检证据写入一份
+HMAC-SHA256 签名收据。以后再次验证时，只要 PPTX、证据文件或收据发生不一致，验证就会
+失败。
 
-- AI 工具或自动化流程生成 PPTX，需要在交付前做一次基础结构检查。
-- 文件经过检查、审批、归档和发送等多个环节，需要确认中途没有被替换。
-- 团队已有渲染报告、可访问性报告或其他验收证据，希望把证据与准确的 PPTX 绑定。
-- 接收方需要在无网络环境中复核文件与验真收据是否一致。
+它适合补上 PPTX 质量检查与最终交付之间的完整性缺口，让检查结果对应到准确的文件，
+而不是只靠文件名或聊天记录判断。
 
-### 三步使用
+### 适用场景
 
-#### 第一步：安装并设置签名密钥
+- AI 工具或自动化流程生成 PPTX，需要在交付前检查基本结构，并保留可复验的结果。
+- 演示文稿经过质检、审批、归档和发送，需要发现中途替换或误传。
+- 渲染报告、可访问性报告、人工验收记录或其他证据需要对应到准确的 PPTX 文件。
+- 团队希望在 CI、内网或无网络环境中增加一道稳定的文件完整性检查。
 
-需要 Python 3.11 或更高版本。当前版本尚未发布到 PyPI，请从已经审核的代码目录安装。
+### 它怎样工作？
+
+1. `create` 在检查前后分别计算 PPTX 的 SHA-256；如果检查过程中有其他进程修改文件，
+   收据不会创建。
+2. 内置检查器验证 PPTX 的 ZIP、OOXML 基本结构和关键关系。提供 `--evidence` 时，外部
+   报告也会计算 SHA-256 并写入收据。
+3. 收据记录文件摘要、字节大小、检查结果和证据摘要，再使用调用方提供的共享密钥生成
+   HMAC-SHA256 签名。
+4. `verify` 重新读取 PPTX 和证据，核对摘要、签名与 `key_id`。任何不一致都会得到失败
+   结果，而不是继续把文件当作已验证版本。
+
+最终得到的是一份小型 JSON 收据和适合自动化读取的成功或失败结果。收据不包含 PPTX
+正文或证据正文。默认情况下，它会保存 PPTX 的源文件名；如果该名称包含客户名称或内部
+标识，可以用 `--artifact-name` 改为由调用方选择的中性逻辑名称。工具会检查名称格式，
+但调用方仍须确保名称不含敏感信息。证据逻辑名称和 `key_id` 也会写入收据，同样不应包含
+敏感信息。
+
+### 快速开始
+
+#### 1. 安装并设置签名密钥
+
+需要 Python 3.11 或更高版本。0.1.0 尚未发布到 PyPI，请从已经审核的代码目录安装。
 
 Linux 或 macOS：
 
@@ -38,28 +63,35 @@ py -3.11 -m pip install .
 $env:ARTIFACTPROOF_SIGNING_KEY = 'base64:REPLACE_WITH_BASE64_KEY'
 ```
 
-请把占位值替换为至少 32 个随机字节生成的密钥，并通过操作系统、CI 密钥库或团队自己的
-密钥管理工具保存。不要把真实密钥写进代码、收据或命令参数。
+请将占位值换成由至少 32 个随机字节生成的密钥，并保存在操作系统、CI 密钥库或团队使用
+的密钥管理工具中。不要把真实密钥写进代码、收据或命令参数。
 
-#### 第二步：检查 PPTX 并生成收据
+#### 2. 检查 PPTX 并创建收据
+
+Linux 或 macOS：
 
 ```bash
 artifactproof create deck.pptx \
+  --artifact-name approved-deck.pptx \
   --evidence render=render-manifest.json \
   --receipt deck.receipt.json \
   --key-id local-ci
 ```
 
-Windows PowerShell 可以使用同一条单行命令：
+Windows PowerShell：
 
 ```powershell
-artifactproof create deck.pptx --evidence render=render-manifest.json --receipt deck.receipt.json --key-id local-ci
+artifactproof create deck.pptx --artifact-name approved-deck.pptx --evidence render=render-manifest.json --receipt deck.receipt.json --key-id local-ci
 ```
 
-如果没有外部证据文件，可以省略 `--evidence`。如果提供了证据，验证时必须提供同名且
-内容一致的文件。
+没有外部报告时可以省略 `--evidence`。如果创建收据时绑定了证据，验证时必须提供逻辑名称
+相同、内容也相同的文件。`--artifact-name` 只控制收据公开的逻辑名称，不改变读取哪个
+文件，也不参与路径匹配；验证仍以 SHA-256 和字节大小为准，因此复验时文件可以换一个
+本地名称。
 
-#### 第三步：交付前或接收后再次验证
+#### 3. 在交付前或接收后复验
+
+Linux 或 macOS：
 
 ```bash
 artifactproof verify deck.pptx \
@@ -74,84 +106,126 @@ Windows PowerShell：
 artifactproof verify deck.pptx --evidence render=render-manifest.json --receipt deck.receipt.json --expected-key-id local-ci
 ```
 
-创建和验证必须使用同一把签名密钥。命令成功时会返回简短的 JSON 结果；文件、证据、
-签名或预期的密钥标识不一致时，验证会失败。
+创建与验证必须使用同一把签名密钥。成功时命令会返回简短的 JSON；PPTX、证据、签名或
+预期的密钥标识不一致时会返回失败。
 
-### 你会得到什么
+### ArtifactProof 能验证什么，不能验证什么？
 
-- 一份 JSON 收据，记录 PPTX 的 SHA-256、字节大小和基础结构检查结果。
-- 外部证据文件的名称、SHA-256 和字节大小，前提是创建时提供了证据。
-- 一份 HMAC-SHA256 签名，用于让持有同一密钥的验证方检查收据是否被修改。
-- 稳定且便于自动化读取的成功或失败结果。
+- 能验证：当前 PPTX 和外部证据是否与签名收据记录的字节内容一致。
+- 能检查：Transitional OOXML `.pptx` 的 ZIP 安全边界、必要部件、XML 和基础关系。
+- 能辅助：把 PPTX 质检证据与最终文件绑定，并在交付前后复核文件完整性。
+- 不能代替：代码签名、公开密钥签名、可信时间戳或通用的文件安全与发布系统。
+- 不能判断：设计美感、排版、可访问性、事实准确性、内容质量、恶意内容或收件人是否
+  已经收到并打开文件。
 
-收据不会保存演示文稿或证据的正文，但会保存 PPTX 文件名、证据逻辑名称和 `key_id`。
-这些名称也应避免包含个人信息或内部标识。
+文件生成成功、基础结构检查通过、视觉验收通过、当前文件未被替换和文件真实送达，是
+不同的结论。ArtifactProof 直接检查基础结构和当前字节是否匹配；外部视觉验收或交付报告
+可以作为证据文件绑定，但 ArtifactProof 不会独立证明报告内容真实，也不会把报告存在
+误写成已经交付。
 
-### 使用限制
-
-- 当前内置检查只面向 Transitional OOXML 格式的 `.pptx` 文件。
-- 它不渲染幻灯片，也不判断设计美感、排版、可访问性、事实准确性或内容质量。
-- 它不是杀毒软件，不能证明文件没有恶意内容。
-- 它不能证明消息已经发送、收到或打开。
-- HMAC 适合共享密钥的团队验证，不提供公开签名、权威时间戳或不可否认性。
-- 保守的 ZIP 安全限制可能拒绝体积异常大的合法演示文稿。
-- 0.1.0 是预发布版本，命令行和 Python API 在 1.0 前仍可能调整。
+HMAC 适合持有同一共享密钥的团队。它不能区分共享该密钥的不同成员，也不提供公开验证
+或不可否认性。保守的 ZIP 安全限制可能拒绝体积异常大的合法 PPTX。0.1.0 是预发布版本，
+命令行和 Python API 在 1.0 前仍可能调整。
 
 ### 常见问题
 
+#### 如何确认交付的 PPTX 没有被替换？
+
+在质检通过时运行 `artifactproof create`，保存 PPTX、收据和密钥；在发送前或接收后运行
+`artifactproof verify`。验证通过表示当前文件、声明的证据和签名收据彼此一致。它不表示
+文件永远不会再变化，因此应尽量在实际交付或使用前复验。
+
+#### ArtifactProof 与单独保存 SHA-256 checksum 有什么区别？
+
+单独的 checksum 需要另一个可信位置保存参考值。ArtifactProof 把 PPTX 摘要、证据摘要
+和检查结果放进同一份结构化收据，并用 HMAC-SHA256 签名。验证方仍然需要通过安全渠道
+获得正确的共享密钥；工具不会自动建立这层信任。
+
+#### 如何避免收据暴露原始 PPTX 文件名？
+
+创建时加入 `--artifact-name approved-deck.pptx`。收据只保存这个逻辑名称，不保存源路径或
+源文件名。逻辑名称会进入签名内容，验证时不能修改；但验证不要求本地文件继续使用
+同一个名称。逻辑名称是公开元数据，不是文件路径；为减少跨平台误用，命令会拒绝路径
+分隔符、首尾空格、结尾句点，以及 Windows 文件名保留字符和设备名。名称格式通过不代表
+内容不敏感，因此不要填写客户名称、账号、项目代号或其他敏感信息。
+
 #### 文件会上传到网络吗？
 
-不会。当前运行时代码只使用 Python 标准库，也不包含网络客户端。文件与证据留在调用者
-选择的本地存储位置。
-
-#### 与单独保存 SHA-256 有什么不同？
-
-普通校验值只能在已有可信参考值时比较文件。ArtifactProof 把 PPTX 校验值、证据校验值
-和检查结果放进同一份带 HMAC 签名的结构化收据，便于团队在后续环节一起复核。
+不会。当前运行时代码只使用 Python 标准库，不包含网络客户端。PPTX、证据和收据都留在
+调用方选择的本地存储位置。
 
 #### Windows、macOS 和 Linux 都能使用吗？
 
-可以。验证格式跨平台一致。Windows 上的收据权限继承目标目录的 DACL，不等同于
-Linux 和 macOS 的 `0600` 权限，因此应把收据放在当前账户专用的目录中。
+可以，收据格式跨平台一致。Linux 和 macOS 上的新收据使用 `0600` 权限；Windows 上的
+文件权限继承目标目录的 DACL，因此应把收据放在当前账户专用的目录中。
 
 #### 能直接检查 PDF、DOCX 或图片吗？
 
-不能。0.1.0 只内置 PPTX 检查器。Python 调用方可以提供自定义 `qa_runner`，但其他格式
-需要单独的威胁模型和测试，不能视为当前项目已经支持。
+0.1.0 的内置检查器仅支持 PPTX。Python 调用方可以提供自定义 `qa_runner`，但其他格式
+需要各自的威胁模型和测试，不能视为项目已经内置支持。
 
 #### 能判断 PPT 是否美观或内容是否正确吗？
 
-不能。视觉审查、可访问性检查和事实核验需要其他工具或人工完成。你可以把这些检查生成的
-报告作为证据交给 ArtifactProof，让收据记录它们对应的是哪一份准确的 PPTX。
+不能。视觉审查、可访问性检查和事实核验需要其他工具或人工完成。可以把这些检查生成的
+报告作为证据，让收据明确它们对应的是哪一份 PPTX。
 
 ## English Overview
 
-ArtifactProof helps people and teams confirm that the PowerPoint file delivered
-later is the same file that passed an earlier check. It runs locally and offline,
-creates a receipt bound to the exact PPTX bytes, and rejects verification if the
-presentation or any declared evidence changes.
+### What problem does ArtifactProof solve?
 
-It is designed for people looking for an offline PPTX integrity checker,
-PowerPoint file verification, a tamper-evident QA receipt, or evidence binding
-for generated artifacts.
+A PPTX may pass review and then move through approval, renaming, upload,
+download, and delivery. How can the recipient confirm that the final file is
+still the exact presentation that passed the earlier check?
 
-### When to use it
+ArtifactProof is a local, offline artifact verification tool for PowerPoint
+(.pptx) files. It uses the file contents rather than the filename or
+modification time. The tool records a SHA-256 checksum, structural QA result,
+and optional evidence in an HMAC-SHA256-signed receipt. Later verification
+fails if the presentation, declared evidence, or receipt no longer matches.
 
-- An AI tool or automation pipeline generates a PPTX that needs a structural
-  check before delivery.
-- A presentation moves through QA, approval, archival, and delivery, and the
-  team needs to detect replacement along the way.
-- Render reports, accessibility reports, or other QA evidence need to stay bound
-  to the exact presentation that was checked.
-- A recipient needs a deterministic verification step that works without a
-  network connection.
+It closes the integrity gap between PPTX quality review and final delivery by
+keeping the review result tied to the exact file rather than relying on a
+filename or chat record.
 
-### Three-step use
+### When should you use it?
 
-#### Step 1: Install and set the signing key
+- An AI tool or automation pipeline creates a PPTX that needs a basic structural
+  check and a result that can be verified later.
+- A presentation passes through QA, approval, archival, and delivery, where an
+  accidental or deliberate replacement needs to be detected.
+- Render output, accessibility reports, human review records, or other evidence
+  must stay associated with the exact PPTX that was checked.
+- A team needs a deterministic file-integrity check in CI, on an internal
+  network, or in an offline environment.
 
-Python 3.11 or newer is required. This version is not on PyPI; install it from a
-reviewed source checkout.
+### How does it work?
+
+1. `create` calculates the PPTX SHA-256 before and after QA. If another process
+   changes the file while QA is running, no receipt is created.
+2. The built-in checker validates the PPTX ZIP package, basic OOXML structure,
+   and key relationships. Each `--evidence` file is hashed and added to the
+   receipt.
+3. The receipt records digests, byte sizes, QA results, and evidence, then signs
+   that payload with an HMAC-SHA256 key supplied by the caller.
+4. `verify` reads the PPTX and evidence again and checks their digests, the
+   receipt signature, and `key_id`. Any mismatch produces a failure instead of
+   treating the file as verified.
+
+The output is a small JSON receipt plus stable success or failure results for
+automation. It does not contain the presentation or evidence contents. By
+default, it stores the PPTX basename. Use `--artifact-name` to replace a source
+filename that contains a customer name or internal identifier with a neutral
+logical name chosen by the caller. The tool validates the name's format, but
+the caller remains responsible for keeping it non-sensitive. Logical evidence
+names and `key_id` are also stored in the receipt and should not contain
+sensitive information.
+
+### Quick start
+
+#### 1. Install and set a signing key
+
+Python 3.11 or newer is required. Version 0.1.0 is not yet published to PyPI;
+install it from a reviewed source checkout.
 
 Linux or macOS:
 
@@ -168,29 +242,37 @@ $env:ARTIFACTPROOF_SIGNING_KEY = 'base64:REPLACE_WITH_BASE64_KEY'
 ```
 
 Replace the placeholder with a key derived from at least 32 random bytes. Keep
-the real key in the operating system, a CI secret store, or another
-caller-controlled secret manager. Do not put it in source code, a receipt, or a
+the real key in an operating-system or CI secret store, or another secret
+manager controlled by your team. Never place it in source code, a receipt, or a
 command argument.
 
-#### Step 2: Check the PPTX and create a receipt
+#### 2. Check the PPTX and create a receipt
+
+Linux or macOS:
 
 ```bash
 artifactproof create deck.pptx \
+  --artifact-name approved-deck.pptx \
   --evidence render=render-manifest.json \
   --receipt deck.receipt.json \
   --key-id local-ci
 ```
 
-Windows PowerShell can use the equivalent single-line command:
+Windows PowerShell:
 
 ```powershell
-artifactproof create deck.pptx --evidence render=render-manifest.json --receipt deck.receipt.json --key-id local-ci
+artifactproof create deck.pptx --artifact-name approved-deck.pptx --evidence render=render-manifest.json --receipt deck.receipt.json --key-id local-ci
 ```
 
-Omit `--evidence` when there is no external evidence file. When evidence is
-declared, verification requires a file with the same logical name and content.
+Omit `--evidence` when there is no external report. If evidence is bound during
+creation, verification requires a file with the same logical name and the same
+contents. `--artifact-name` changes only the public label stored in the receipt;
+it does not select a different input or add a path check. Verification still
+uses SHA-256 and byte size, so the local file may have a different name later.
 
-#### Step 3: Verify before delivery or after receipt
+#### 3. Verify before delivery or after receipt
+
+Linux or macOS:
 
 ```bash
 artifactproof verify deck.pptx \
@@ -206,69 +288,88 @@ artifactproof verify deck.pptx --evidence render=render-manifest.json --receipt 
 ```
 
 Creation and verification must use the same signing key. A successful command
-returns a small JSON result. Verification fails when the artifact, evidence,
-signature, or expected key identifier does not match.
+returns a small JSON object. A mismatch in the PPTX, evidence, signature, or
+expected key identifier returns a failure.
 
-### What you get
+### What can ArtifactProof verify, and where does it stop?
 
-- A JSON receipt containing the PPTX SHA-256, byte size, and structural check
-  result.
-- The name, SHA-256, and byte size of each declared evidence file.
-- An HMAC-SHA256 signature that lets a verifier with the same key detect receipt
-  modification.
-- Stable success and failure results suitable for automation.
+- It verifies that the current PPTX and evidence bytes match an HMAC-signed
+  receipt.
+- It checks ZIP safety boundaries, required parts, XML, and basic relationships
+  in Transitional OOXML `.pptx` files.
+- It can bind PPTX review evidence to the final file and support integrity
+  checks before and after delivery.
+- It does not replace code signing, public-key signatures, trusted timestamps,
+  or a general file-security and release system.
+- It does not judge design, typography, accessibility, factual accuracy,
+  content quality, malicious intent, or whether a recipient received or opened
+  the file.
 
-The receipt does not store presentation or evidence contents. It does store the
-PPTX basename, logical evidence names, and `key_id`, so those names should not
-contain personal or internal identifiers.
+Generation success, structural validation, visual approval, exact-file
+integrity, and actual delivery are separate claims. ArtifactProof directly
+checks basic structure and byte identity. It can bind an external visual-review
+or delivery report as evidence, but it does not independently prove that the
+report is true or treat the presence of a report as proof of delivery.
 
-### Limits
-
-- The built-in checker currently supports only Transitional OOXML `.pptx` files.
-- It does not render slides or judge design, typography, accessibility, factual
-  accuracy, or content quality.
-- It is not antivirus software and does not prove that a file is harmless.
-- It does not prove that a message was sent, received, or opened.
-- HMAC supports shared-key team verification; it does not provide public
-  signatures, trusted timestamps, or non-repudiation.
-- Conservative ZIP safety limits may reject unusually large valid presentations.
-- Version 0.1.0 is a pre-release; the CLI and Python API may change before 1.0.
+HMAC works for teams that share the same secret. It cannot distinguish between
+people who hold that key and does not provide public verification or
+non-repudiation. Conservative ZIP limits may reject an unusually large valid
+PPTX. Version 0.1.0 is a pre-release, so the CLI and Python API may change before
+1.0.
 
 ### Frequently asked questions
 
+#### How do I verify that a delivered PPTX was not replaced after QA?
+
+Run `artifactproof create` when QA passes, retain the PPTX, receipt, and key, and
+run `artifactproof verify` immediately before delivery or after receipt. A pass
+means the current file, declared evidence, and signed receipt agree. It does not
+prevent a later change, so verify as close as possible to the actual handoff or
+use.
+
+#### How is ArtifactProof different from saving a SHA-256 checksum?
+
+A standalone checksum still needs a trusted place to store its reference value.
+ArtifactProof puts the PPTX digest, evidence digests, and QA result in one
+structured receipt and signs it with HMAC-SHA256. The verifier must still obtain
+the correct shared key through a trusted channel; the tool does not create that
+trust automatically.
+
+#### How can I keep the original PPTX filename out of the receipt?
+
+Add `--artifact-name approved-deck.pptx` when creating the receipt. The receipt
+stores that logical name instead of the source path or basename. The logical
+name is signed and cannot be edited later, but verification does not require the
+local file to keep the same name. A logical name is public metadata, not a file
+path. To reduce cross-platform ambiguity, the CLI rejects path separators,
+surrounding whitespace, a trailing dot, and Windows-reserved filename
+characters and device names. Passing these format checks does not make the
+value private, so do not put customer names, account numbers, project codes, or
+other sensitive identifiers in the logical name.
+
 #### Does ArtifactProof upload a presentation?
 
-No. The shipped runtime uses only the Python standard library and has no network
-client. Files and evidence remain in storage selected by the caller.
-
-#### How is this different from storing only a SHA-256 checksum?
-
-A checksum supports comparison only when the verifier already has a trusted
-reference value. ArtifactProof places the PPTX digest, evidence digests, and QA
-result in one HMAC-signed structured receipt so a team can verify them together.
+No. The current runtime uses only the Python standard library and contains no
+network client. The PPTX, evidence, and receipt remain in storage selected by
+the caller.
 
 #### Does it work on Windows, macOS, and Linux?
 
-Yes. The receipt format is platform-independent. On Windows, receipt privacy
-depends on the destination directory DACL rather than POSIX `0600`, so use a
-directory restricted to the intended account.
+Yes. The receipt format is platform-independent. New receipts use mode `0600`
+on Linux and macOS. On Windows, privacy depends on the destination directory
+DACL, so use a directory restricted to the intended account.
 
 #### Can it validate PDF, DOCX, or images?
 
-Not with the built-in checker. Version 0.1.0 ships only a PPTX adapter. Python
-callers can supply a custom `qa_runner`, but other formats need their own threat
-model and tests and are not claimed as built-in support.
+The built-in checker in 0.1.0 supports PPTX only. Python callers can supply a
+custom `qa_runner`, but each additional format needs its own threat model and
+tests and is not claimed as built-in support.
 
 #### Can it judge visual quality or factual accuracy?
 
 No. Visual review, accessibility checks, and fact-checking require another tool
-or a person. Their reports can be supplied as evidence so the ArtifactProof
-receipt records which exact PPTX those reports belong to.
-
-## 技术参考说明
-
-以下内容统一使用英文，供集成者、安全审查人员和维护者查阅。命令、API 名称、错误码和
-收据字段保持原样，避免翻译造成歧义。
+or a person. Their reports can be supplied as evidence so the receipt records
+which exact PPTX they belong to.
 
 ## Technical reference
 
@@ -310,6 +411,10 @@ semantic correctness, or whether a recipient actually opened a message. A
 rendering or channel-delivery adapter can produce evidence files whose hashes
 are then bound into the receipt.
 
+The evidence input accepts a caller-selected report as opaque bytes.
+ArtifactProof hashes that file and binds it to the PPTX receipt, but it does not
+interpret the report or validate its conclusions.
+
 ### Runtime and platform behavior
 
 - Python 3.11 or newer
@@ -335,8 +440,14 @@ The CLI deliberately has no raw `--key` option. It accepts a key only through
 the selected environment variable (default:
 `ARTIFACTPROOF_SIGNING_KEY`). The Python API accepts key bytes as an explicit
 parameter. Keys are never written to receipts or normal CLI output.
-`key_id`, the artifact basename, and logical evidence names are public receipt
-metadata; do not put secrets or private identifiers in those fields.
+`key_id`, the artifact name, and logical evidence names are public receipt
+metadata. The create command stores the source basename by default; use
+`--artifact-name` to substitute a caller-chosen logical name. The option
+accepts 1 to 255 printable characters but rejects path separators, surrounding
+whitespace, trailing dots, and characters reserved in common Windows
+filenames, including reserved device names. Format validation does not detect
+sensitive meaning; the caller must keep every public receipt field free of
+secrets and private identifiers.
 
 `write_receipt` requires the artifact and evidence paths as
 `protected_paths`. It rejects exact paths, normalized aliases, symlinks and
@@ -363,6 +474,7 @@ receipt = create_receipt(
     evidence={"slides": Path("render-manifest.json")},
     signing_key=key,
     key_id="local-ci",
+    artifact_name="approved-deck.pptx",
 )
 write_receipt(
     Path("deck.receipt.json"),

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-"""Offline, hash-bound QA receipts for generated artifacts."""
+"""Offline PPTX verification with signed, evidence-bound receipts."""
 
 from .errors import (
     ArtifactChangedError,

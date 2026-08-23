@@ -1,5 +1,5 @@
 name: Feature request
-description: Propose a focused, security-compatible improvement.
+description: Suggest a practical improvement that fits the current security scope.
 title: "[Feature] "
 labels:
   - enhancement
@@ -8,20 +8,20 @@ body:
     id: problem
     attributes:
       label: Problem
-      description: What user problem should be solved?
+      description: Which workflow is difficult today, and what outcome would help?
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
       label: Proposed behavior
-      description: Describe inputs, outputs, failure behavior, and platform impact.
+      description: Describe the expected input, result, failure behavior, and platform impact.
     validations:
       required: true
   - type: textarea
     id: security
     attributes:
       label: Security and privacy impact
-      description: Note any effect on key handling, paths, archives, or output safety.
+      description: Explain any effect on key handling, filenames, paths, archives, or output safety.
     validations:
       required: true

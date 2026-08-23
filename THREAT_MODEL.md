@@ -52,7 +52,8 @@ signing key and installed ArtifactProof code are trusted.
   slides, inspect embedded objects, or determine whether content is safe.
 - Compression limits are conservative heuristics, not a proof against all denial
   of service techniques.
-- Receipt filenames, key identifiers, artifact basenames and logical evidence
-  names are metadata and may be sensitive.
+- Receipt filenames, key identifiers, artifact names and logical evidence names
+  are metadata and may be sensitive. `--artifact-name` can replace the default
+  source basename, but the caller must still choose a non-sensitive label.
 - HMAC signatures provide integrity and authenticity, not confidentiality,
   timestamp authority, non-repudiation, or proof of channel delivery.

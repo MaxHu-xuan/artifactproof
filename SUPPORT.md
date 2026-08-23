@@ -1,10 +1,11 @@
 # Support
 
-ArtifactProof is an alpha-stage project maintained on a best-effort basis.
+ArtifactProof 0.1.x is a pre-1.0 project with best-effort community support.
 
-- For reproducible bugs, use the bug-report issue form with a synthetic sample
-  or minimal reproduction.
-- For narrowly scoped enhancements, use the feature-request form.
+- For a reproducible bug, use the bug-report form with a synthetic sample or
+  the smallest possible reproduction.
+- For a focused improvement, use the feature-request form and explain the user
+  outcome before proposing an implementation.
 - For security vulnerabilities or reports containing sensitive details, follow
   [SECURITY.md](SECURITY.md) and do not open a public issue.
 

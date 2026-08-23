@@ -397,6 +397,165 @@ class ArtifactProofTests(unittest.TestCase):
             )
         )
 
+    def test_default_artifact_name_remains_the_source_basename(self) -> None:
+        receipt = create_receipt(self.artifact, {}, KEY, "test-key")
+        positional_runner_receipt = create_receipt(
+            self.artifact,
+            {},
+            KEY,
+            "test-key",
+            inspect_pptx,
+        )
+
+        self.assertEqual(receipt["artifact"]["name"], self.artifact.name)
+        self.assertEqual(
+            positional_runner_receipt["artifact"]["name"],
+            self.artifact.name,
+        )
+
+    def test_logical_artifact_name_hides_basename_and_survives_rename(self) -> None:
+        source = self.root / "PRIVATE_SOURCE_BASENAME.pptx"
+        make_pptx(source)
+        logical_name = "approved-delivery.pptx"
+
+        receipt = create_receipt(
+            source,
+            {},
+            KEY,
+            "test-key",
+            artifact_name=logical_name,
+        )
+        serialized = json.dumps(receipt, ensure_ascii=False, sort_keys=True)
+        self.assertEqual(receipt["artifact"]["name"], logical_name)
+        self.assertNotIn(source.name, serialized)
+        self.assertNotIn(str(source), serialized)
+
+        received = self.root / "received-copy.pptx"
+        source.rename(received)
+        self.assertTrue(verify_receipt(receipt, received, {}, KEY))
+
+    def test_cli_artifact_name_hides_basename_and_verifies(self) -> None:
+        source = self.root / "PRIVATE_CLI_SOURCE_BASENAME.pptx"
+        receipt_path = self.root / "logical-name.receipt.json"
+        make_pptx(source)
+        environment = {"ARTIFACTPROOF_SIGNING_KEY": "K" * 32}
+
+        with mock.patch.dict(os.environ, environment):
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                created = cli.main(
+                    [
+                        "create",
+                        str(source),
+                        "--artifact-name",
+                        "approved-deck.pptx",
+                        "--receipt",
+                        str(receipt_path),
+                        "--key-id",
+                        "test-key",
+                    ]
+                )
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                verified = cli.main(
+                    [
+                        "verify",
+                        str(source),
+                        "--receipt",
+                        str(receipt_path),
+                        "--expected-key-id",
+                        "test-key",
+                    ]
+                )
+
+        persisted = receipt_path.read_text(encoding="utf-8")
+        self.assertEqual(created, 0)
+        self.assertEqual(verified, 0)
+        self.assertEqual(json.loads(persisted)["artifact"]["name"], "approved-deck.pptx")
+        self.assertNotIn(source.name, persisted)
+        self.assertNotIn(str(source), persisted)
+
+    def test_invalid_artifact_name_fails_without_echoing_the_value(self) -> None:
+        marker = "DO_NOT_ECHO_LOGICAL_NAME"
+        invalid_name = "folder/" + marker
+
+        with self.assertRaises(InputError) as captured:
+            create_receipt(
+                self.artifact,
+                {},
+                KEY,
+                "test-key",
+                artifact_name=invalid_name,
+            )
+        self.assertNotIn(marker, str(captured.exception))
+
+        receipt_path = self.root / "invalid-name.receipt.json"
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with mock.patch.dict(os.environ, {"ARTIFACTPROOF_SIGNING_KEY": "K" * 32}):
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                status = cli.main(
+                    [
+                        "create",
+                        str(self.artifact),
+                        "--artifact-name",
+                        invalid_name,
+                        "--receipt",
+                        str(receipt_path),
+                    ]
+                )
+        self.assertEqual(status, 2)
+        self.assertFalse(receipt_path.exists())
+        self.assertNotIn(marker, stdout.getvalue() + stderr.getvalue())
+
+        for invalid in (
+            "",
+            ".",
+            "..",
+            " leading",
+            "trailing ",
+            "trailing.",
+            "folder/name.pptx",
+            "folder\\name.pptx",
+            "drive:name.pptx",
+            'name"quote.pptx',
+            "name<left.pptx",
+            "name>right.pptx",
+            "name|pipe.pptx",
+            "name?.pptx",
+            "name*star.pptx",
+            "CON",
+            "con.pptx",
+            "PrN.receipt",
+            "AUX.txt",
+            "nul.data.json",
+            "COM1",
+            "com9.pptx",
+            "COM¹",
+            "com².pptx",
+            "CoM³.notes",
+            "LPT1",
+            "lpt9.anything",
+            "LPT¹",
+            "lpt².pptx",
+            "LpT³.notes",
+            "CON .pptx",
+            "line\nbreak.pptx",
+            "x" * 256,
+            123,
+        ):
+            with self.subTest(invalid_type=type(invalid).__name__):
+                with self.assertRaises(InputError) as invalid_captured:
+                    create_receipt(
+                        self.artifact,
+                        {},
+                        KEY,
+                        "test-key",
+                        artifact_name=invalid,
+                    )
+                self.assertEqual(
+                    str(invalid_captured.exception),
+                    "the artifact logical name is invalid",
+                )
+
     def test_receipt_matches_schema_declared_constants_and_required_fields(self) -> None:
         receipt = create_receipt(self.artifact, {}, KEY, "test-key")
         schema_path = Path(__file__).parents[1] / "schema" / "receipt.schema.json"
@@ -467,6 +626,20 @@ class ArtifactProofTests(unittest.TestCase):
         receipt = create_receipt(self.artifact, {}, KEY, "test-key")
         tampered = copy.deepcopy(receipt)
         tampered["qa"]["checks"][0]["detail"] = "changed-after-signing"
+        with self.assertRaises(VerificationError):
+            verify_receipt(tampered, self.artifact, {}, KEY)
+
+    def test_tampered_logical_artifact_name_is_rejected(self) -> None:
+        receipt = create_receipt(
+            self.artifact,
+            {},
+            KEY,
+            "test-key",
+            artifact_name="approved-deck.pptx",
+        )
+        tampered = copy.deepcopy(receipt)
+        tampered["artifact"]["name"] = "replacement-deck.pptx"
+
         with self.assertRaises(VerificationError):
             verify_receipt(tampered, self.artifact, {}, KEY)
 
