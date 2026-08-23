@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:artifactproof:schema:receipt:v1",
+  "title": "ArtifactProof receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "created_at",
+    "artifact",
+    "evidence",
+    "qa",
+    "signature"
+  ],
+  "properties": {
+    "schema_version": {"const": "artifactproof.receipt.v1"},
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z$",
+      "$comment": "Runtime validation also rejects impossible calendar dates."
+    },
+    "artifact": {"$ref": "#/$defs/fileDigest"},
+    "evidence": {
+      "type": "array",
+      "$comment": "Runtime validation additionally requires unique evidence names.",
+      "items": {"$ref": "#/$defs/fileDigest"}
+    },
+    "qa": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "passed", "slide_count", "checks", "errors", "warnings"],
+      "properties": {
+        "kind": {"const": "pptx-basic"},
+        "passed": {"const": true},
+        "slide_count": {"type": "integer", "minimum": 1},
+        "checks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "status"],
+            "properties": {
+              "id": {"type": "string", "pattern": "^[a-z0-9_.-]{1,64}$"},
+              "status": {"const": "pass"},
+              "detail": {"type": "string", "maxLength": 256}
+            }
+          }
+        },
+        "errors": {
+          "type": "array",
+          "maxItems": 0,
+          "items": {"type": "string", "pattern": "^[a-z0-9_.-]{1,64}$"}
+        },
+        "warnings": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[a-z0-9_.-]{1,64}$"}
+        }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "key_id", "value"],
+      "properties": {
+        "algorithm": {"const": "HMAC-SHA256"},
+        "key_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$"},
+        "value": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    }
+  },
+  "$defs": {
+    "fileDigest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "sha256", "size_bytes"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[^\\u0000-\\u001F\\u007F\\uD800-\\uDFFF]+$"
+        },
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "size_bytes": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

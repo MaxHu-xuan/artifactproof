@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.DS_Store
+Thumbs.db
+Desktop.ini
+.env
+.venv/
+.coverage
+.pytest_cache/
+build/
+dist/
+*.receipt.json
