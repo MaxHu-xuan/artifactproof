@@ -38,6 +38,14 @@ KEY_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 CODE_RE = re.compile(r"^[a-z0-9_.-]{1,64}$")
 SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 ENV_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
+UNSAFE_LOGICAL_NAME_CHARACTERS = frozenset('<>:"/\\|?*')
+WINDOWS_RESERVED_DEVICE_NAMES = frozenset(
+    {"CON", "PRN", "AUX", "NUL"}
+    | {f"COM{number}" for number in range(1, 10)}
+    | {f"LPT{number}" for number in range(1, 10)}
+    | {f"COM{number}" for number in ("¹", "²", "³")}
+    | {f"LPT{number}" for number in ("¹", "²", "³")}
+)
 CANONICAL_UTC_TIMESTAMP_RE = re.compile(
     r"^(?P<base>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})"
     r"(?:\.[0-9]+)?Z$"
@@ -117,6 +125,29 @@ def _valid_name(value: object) -> bool:
             for character in value
         )
     )
+
+
+def _artifact_logical_name(value: Optional[str]) -> Optional[str]:
+    """Validate an optional logical label without echoing its value."""
+
+    if value is None:
+        return None
+    windows_stem = (
+        value.split(".", 1)[0].rstrip(" ").upper()
+        if isinstance(value, str)
+        else ""
+    )
+    if (
+        not _valid_name(value)
+        or not value.isprintable()
+        or value != value.strip()
+        or value in (".", "..")
+        or value.endswith(".")
+        or any(character in UNSAFE_LOGICAL_NAME_CHARACTERS for character in value)
+        or windows_stem in WINDOWS_RESERVED_DEVICE_NAMES
+    ):
+        raise InputError("the artifact logical name is invalid")
+    return value
 
 
 def _valid_digest(item: object) -> bool:
@@ -228,20 +259,23 @@ def create_receipt(
     signing_key: Union[str, bytes, bytearray],
     key_id: str,
     qa_runner: Callable[[PathLike], PptxQAResult] = inspect_pptx,
+    *,
+    artifact_name: Optional[str] = None,
 ) -> Dict[str, object]:
-    """Create a signed receipt, failing if QA or stability checks fail."""
+    """Create a signed receipt, optionally replacing the source basename."""
 
+    logical_artifact_name = _artifact_logical_name(artifact_name)
     if not isinstance(key_id, str) or KEY_ID_RE.fullmatch(key_id) is None:
         raise SigningKeyError("the key identifier is invalid")
     key = _key_bytes(signing_key)
-    artifact_before = digest_file(artifact)
+    artifact_before = digest_file(artifact, name=logical_artifact_name)
     try:
         qa_result = qa_runner(artifact)
     except Exception as exc:
         if isinstance(exc, ArtifactChangedError):
             raise
         raise QualityCheckError(("pptx.qa_runtime_error",)) from exc
-    artifact_after = digest_file(artifact)
+    artifact_after = digest_file(artifact, name=logical_artifact_name)
     if artifact_before != artifact_after:
         raise ArtifactChangedError()
     if not isinstance(qa_result, PptxQAResult):
@@ -257,7 +291,7 @@ def create_receipt(
         for name, path in sorted(evidence_items, key=lambda item: item[0])
     }
 
-    artifact_final = digest_file(artifact)
+    artifact_final = digest_file(artifact, name=logical_artifact_name)
     if artifact_after != artifact_final:
         raise ArtifactChangedError()
     evidence_final = {
@@ -280,7 +314,7 @@ def create_receipt(
         },
     }
     receipt["signature"]["value"] = _signature_value(receipt, key)
-    artifact_at_return = digest_file(artifact)
+    artifact_at_return = digest_file(artifact, name=logical_artifact_name)
     if artifact_final != artifact_at_return:
         raise ArtifactChangedError()
     evidence_at_return = {

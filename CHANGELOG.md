@@ -10,4 +10,6 @@ versioning once a public release is published.
 - Reject input mutation, unsafe receipt aliases, malformed receipts, and
   non-canonical archive paths.
 - Provide stable, values-free CLI errors and a pre-publication privacy audit.
+- Allow callers to replace a sensitive PPTX basename with a signed logical
+  artifact name while keeping verification content-based.
 - Test Python 3.11 through 3.14 across Linux, macOS, and Windows.

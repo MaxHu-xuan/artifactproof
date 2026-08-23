@@ -42,8 +42,10 @@ response or remediation deadline is offered for this pre-1.0 project.
 
 Expected failures use stable public error codes and do not print file contents,
 key material, signatures, or full input paths. Receipt metadata still includes
-the key identifier, logical evidence names, and the artifact basename, so choose
-non-sensitive values.
+the key identifier, logical evidence names, and an artifact name. The create
+command uses the source basename by default. If that basename is sensitive, use
+`--artifact-name` with a neutral logical name and keep all receipt metadata
+non-sensitive.
 
 Atomic receipt files are created with mode `0600` on POSIX. On Windows, Python
 mode bits do not establish a private DACL, so confidentiality depends on the

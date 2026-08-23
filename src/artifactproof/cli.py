@@ -47,19 +47,28 @@ def _evidence_map(values: Sequence[str]) -> Dict[str, Path]:
 def _parser() -> argparse.ArgumentParser:
     parser = SafeArgumentParser(
         prog="artifactproof",
-        description="Create and verify offline, hash-bound artifact QA receipts.",
+        description="Verify PPTX files with offline, signed QA receipts.",
     )
     parser.add_argument("--version", action="version", version="artifactproof 0.1.0")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    create = subparsers.add_parser("create", help="QA an artifact and create a receipt")
+    create = subparsers.add_parser(
+        "create", help="check a PPTX and create a signed receipt"
+    )
     create.add_argument("artifact")
     create.add_argument("--receipt", required=True)
+    create.add_argument(
+        "--artifact-name",
+        metavar="NAME",
+        help="store a caller-chosen logical name instead of the source basename",
+    )
     create.add_argument("--evidence", action="append", default=[], metavar="NAME=PATH")
     create.add_argument("--key-env", default=DEFAULT_KEY_ENV, metavar="ENV_NAME")
     create.add_argument("--key-id", default="default")
 
-    verify = subparsers.add_parser("verify", help="verify a receipt and bound files")
+    verify = subparsers.add_parser(
+        "verify", help="verify the current PPTX and bound evidence"
+    )
     verify.add_argument("artifact")
     verify.add_argument("--receipt", required=True)
     verify.add_argument("--evidence", action="append", default=[], metavar="NAME=PATH")
@@ -83,6 +92,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 evidence=evidence,
                 signing_key=key,
                 key_id=args.key_id,
+                artifact_name=args.artifact_name,
             )
             write_receipt(
                 Path(args.receipt),
