@@ -43,7 +43,7 @@ REQUIRED_FILES = (
     "CHANGELOG.md", "CODE_OF_CONDUCT.md", "CONTRIBUTING.md", "LICENSE",
     "MANIFEST.in", "PROVENANCE.md", "README.md", "RELEASING.md",
     "SECURITY.md", "SUPPORT.md", "THREAT_MODEL.md", "pyproject.toml",
-    "scripts/privacy_audit.py",
+    "scripts/canonicalize_sdist.py", "scripts/privacy_audit.py",
 )
 
 
@@ -159,7 +159,11 @@ def _metadata_checks(root: Path, findings: Counter[Tuple[str, str]]) -> None:
         manifest = (root / "MANIFEST.in").read_text(encoding="utf-8")
     except (OSError, UnicodeError):
         return
-    for entry in ("include LICENSE", "include scripts/privacy_audit.py"):
+    for entry in (
+        "include LICENSE",
+        "include scripts/canonicalize_sdist.py",
+        "include scripts/privacy_audit.py",
+    ):
         if entry not in manifest.splitlines():
             findings[("MANIFEST.in", "metadata.sdist_entry_missing")] += 1
 
