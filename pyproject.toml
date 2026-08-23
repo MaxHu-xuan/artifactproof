@@ -11,7 +11,17 @@ requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 dependencies = []
+keywords = [
+  "artifact-integrity",
+  "quality-assurance",
+  "pptx",
+  "receipts",
+  "supply-chain-security",
+]
 classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.11",
@@ -21,6 +31,13 @@ classifiers = [
   "Topic :: Security",
   "Topic :: Software Development :: Quality Assurance",
 ]
+
+[project.urls]
+Homepage = "https://github.com/MaxHu-xuan/artifactproof"
+Repository = "https://github.com/MaxHu-xuan/artifactproof"
+Issues = "https://github.com/MaxHu-xuan/artifactproof/issues"
+Changelog = "https://github.com/MaxHu-xuan/artifactproof/blob/main/CHANGELOG.md"
+Security = "https://github.com/MaxHu-xuan/artifactproof/security/policy"
 
 [project.scripts]
 artifactproof = "artifactproof.cli:main"

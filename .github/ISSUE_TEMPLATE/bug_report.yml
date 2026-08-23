@@ -1,0 +1,52 @@
+name: Bug report
+description: Report a reproducible problem using synthetic, non-sensitive inputs.
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include keys, credentials, personal data, private receipts,
+        production artifacts, logs, databases, or absolute home paths.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Synthetic reproduction
+      description: Provide minimal steps and synthetic inputs.
+    validations:
+      required: true
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      placeholder: "3.11"
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Data-safety confirmation
+      options:
+        - label: I removed secrets, personal data, private paths, and production artifacts.
+          required: true
+        - label: This is not a confidential security vulnerability.
+          required: true

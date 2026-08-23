@@ -15,6 +15,12 @@ scratch and use only synthetic fixtures.
 ArtifactProof is licensed under the Apache License, Version 2.0. See
 [`LICENSE`](LICENSE).
 
+## Project status
+
+Version 0.1.0 is a review-ready pre-release. The receipt schema is explicit,
+but the Python API and CLI may still change before 1.0. The package has not been
+published to PyPI; install it from a reviewed checkout or release artifact.
+
 ## What it proves
 
 For each receipt, ArtifactProof records:
@@ -49,14 +55,46 @@ are then bound into the receipt.
 - Standard library only at runtime
 - No network access
 
-## Local use
+CI covers Python 3.11 through 3.14 on Ubuntu, plus Python 3.11 and 3.14 on
+macOS and Windows. Archive member names always use POSIX rules, regardless of
+the host operating system.
+
+| Host | Receipt-file protection | Notable behavior |
+| --- | --- | --- |
+| Linux and macOS | New receipts are written with mode `0600` | Atomic replacement uses `os.replace` on the destination filesystem. |
+| Windows | Receipts inherit the destination directory's DACL | Keep receipts in an account-private directory; another process holding the destination open can block replacement. |
+
+## Install and local use
+
+From the repository root:
+
+```bash
+python3 -m pip install .
+artifactproof --version
+```
+
+On Windows PowerShell:
+
+```powershell
+py -3.11 -m pip install .
+artifactproof --version
+```
 
 Set a signing key in an environment variable. Use at least 32 random bytes. A
-base64-encoded value is preferred:
+base64-encoded value is preferred. On Linux or macOS:
 
 ```bash
 export ARTIFACTPROOF_SIGNING_KEY='base64:REPLACE_WITH_BASE64_KEY'
 ```
+
+On Windows PowerShell:
+
+```powershell
+$env:ARTIFACTPROOF_SIGNING_KEY = 'base64:REPLACE_WITH_BASE64_KEY'
+```
+
+Do not reuse the placeholder. Supply the real value through the operating
+system, CI secret store, or another caller-controlled secret manager.
 
 Create a receipt:
 
@@ -74,6 +112,13 @@ artifactproof verify deck.pptx \
   --evidence slides=render-manifest.json \
   --receipt deck.receipt.json \
   --expected-key-id local-ci
+```
+
+The equivalent Windows PowerShell commands can be entered as single lines:
+
+```powershell
+artifactproof create deck.pptx --evidence slides=render-manifest.json --receipt deck.receipt.json --key-id local-ci
+artifactproof verify deck.pptx --evidence slides=render-manifest.json --receipt deck.receipt.json --expected-key-id local-ci
 ```
 
 The CLI deliberately has no raw `--key` option. It accepts a key only through
@@ -213,5 +258,5 @@ oldest and newest supported versions on macOS and Windows. Symlink tests are
 skipped only when the host does not permit creating symlinks; hard-link and
 path-alias checks remain active.
 
-See [THREAT_MODEL.md](THREAT_MODEL.md) and [SECURITY.md](SECURITY.md) before
-embedding ArtifactProof into a delivery system.
+See [THREAT_MODEL.md](THREAT_MODEL.md), [SECURITY.md](SECURITY.md), and
+[SUPPORT.md](SUPPORT.md) before embedding ArtifactProof into a delivery system.

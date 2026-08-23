@@ -19,5 +19,13 @@ PYTHONDONTWRITEBYTECODE=1 python3 scripts/privacy_audit.py
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/privacy_audit.py --self-test
 ```
 
+Update documentation and tests for every behavior change. Platform-sensitive
+changes must state the intended Linux, macOS, and Windows behavior. Avoid new
+runtime dependencies unless the security and offline-use tradeoff is explicit.
+
+Use a focused pull request and complete the repository's safety checklist.
+Maintainers may decline changes that expand the threat model beyond the
+project's current scope.
+
 Security vulnerabilities should be reported according to `SECURITY.md`, without
 including sensitive samples in a public issue.

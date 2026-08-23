@@ -2,14 +2,29 @@
 
 ## Current status
 
-ArtifactProof is an unreleased clean-room prototype. Do not treat it as a
-complete sandbox for hostile Office documents.
+ArtifactProof 0.1.x is an alpha-stage clean-room implementation. Do not treat it
+as a complete sandbox for hostile Office documents.
+
+| Version | Supported |
+| --- | --- |
+| 0.1.x | Security fixes during the alpha period |
+| Earlier or unreleased snapshots | No |
 
 ## Reporting a vulnerability
 
 Do not include real artifacts, signing keys, personal information, credentials,
-or private receipts in a public issue. Until a private reporting address is
-chosen, retain the report privately with the repository owner.
+or private receipts in a public issue. Use GitHub's private vulnerability
+reporting for this repository:
+
+https://github.com/MaxHu-xuan/artifactproof/security/advisories/new
+
+If that private form is unavailable, retain the report rather than posting
+sensitive details publicly. Include only the smallest synthetic reproduction,
+affected version, security impact, and suggested mitigation.
+
+The maintainer will acknowledge a usable report on a best-effort basis, assess
+the impact, and coordinate a fix before public disclosure. No guaranteed
+response or remediation deadline is offered for this pre-1.0 project.
 
 ## Key handling
 

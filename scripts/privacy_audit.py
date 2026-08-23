@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import errno
 import hashlib
 import json
 import os
@@ -39,8 +40,10 @@ TEXT_SUFFIXES = frozenset(
 )
 TEXT_NAMES = frozenset((".gitignore", "LICENSE", "MANIFEST.in"))
 REQUIRED_FILES = (
-    "CONTRIBUTING.md", "LICENSE", "MANIFEST.in", "PROVENANCE.md", "README.md",
-    "SECURITY.md", "THREAT_MODEL.md", "pyproject.toml", "scripts/privacy_audit.py",
+    "CHANGELOG.md", "CODE_OF_CONDUCT.md", "CONTRIBUTING.md", "LICENSE",
+    "MANIFEST.in", "PROVENANCE.md", "README.md", "RELEASING.md",
+    "SECURITY.md", "SUPPORT.md", "THREAT_MODEL.md", "pyproject.toml",
+    "scripts/privacy_audit.py",
 )
 
 
@@ -85,7 +88,25 @@ def _files(
     findings: Counter[Tuple[str, str]],
     sdist: bool = False,
 ) -> Iterator[Path]:
-    for directory, names, files in os.walk(str(root), topdown=True, followlinks=False):
+    def on_walk_error(error: OSError) -> None:
+        raw_path = getattr(error, "filename", None)
+        relative = "."
+        if isinstance(raw_path, str):
+            try:
+                candidate = Path(raw_path)
+                candidate_relative = candidate.relative_to(root)
+                if all(part not in ("", ".", "..") for part in candidate_relative.parts):
+                    relative = candidate_relative.as_posix()
+            except (OSError, ValueError):
+                pass
+        findings[(relative, "scan.directory_error")] += 1
+
+    for directory, names, files in os.walk(
+        str(root),
+        topdown=True,
+        onerror=on_walk_error,
+        followlinks=False,
+    ):
         base = Path(directory)
         kept = []
         for name in sorted(names):
@@ -218,8 +239,8 @@ def _report(findings: Counter[Tuple[str, str]], files_scanned: int) -> Dict[str,
     }
 
 
-def self_test(sdist: bool = False) -> bool:
-    if not audit(PROJECT_ROOT, sdist=sdist)["ok"]:
+def self_test(root: Path = PROJECT_ROOT, sdist: bool = False) -> bool:
+    if not audit(root, sdist=sdist)["ok"]:
         return False
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -227,7 +248,7 @@ def self_test(sdist: bool = False) -> bool:
             "/ho" + "me/" + "sample-user/notes",
             "C:" + "\\Us" + "ers\\" + "sample-user\\notes",
             "person" + "@" + "example.invalid",
-            "155" + "0000" + "1234",
+            "139" + "\u0660" * 4 + "\u0661" * 4,
             "192" + ".0.2.1",
             "s" + "k-" + "A" * 24,
             "-----BEGIN " + "PRIVATE KEY-----",
@@ -312,6 +333,35 @@ def self_test(sdist: bool = False) -> bool:
                 "artifact.generated_directory",
             ):
                 return False
+
+    with tempfile.TemporaryDirectory() as directory:
+        synthetic_root = Path(directory).resolve()
+        original_walk = os.walk
+
+        def denied_walk(*args, **kwargs):
+            del args
+            onerror = kwargs.get("onerror")
+            if onerror is not None:
+                onerror(
+                    OSError(
+                        errno.EACCES,
+                        "synthetic directory error",
+                        str(synthetic_root / "blocked"),
+                    )
+                )
+            return iter(())
+
+        os.walk = denied_walk
+        try:
+            unreadable_report = audit(synthetic_root, validate_release=False)
+        finally:
+            os.walk = original_walk
+        if unreadable_report["ok"] or not _has_finding(
+            unreadable_report,
+            "blocked",
+            "scan.directory_error",
+        ):
+            return False
     return True
 
 
@@ -339,7 +389,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
         args = parser.parse_args(argv)
         if args.self_test:
-            ok = self_test(sdist=args.sdist)
+            ok = self_test(root=Path(args.root), sdist=args.sdist)
             print(json.dumps({"ok": ok, "code": "ok" if ok else "self_test_failed", "count": 0 if ok else 1}, sort_keys=True, separators=(",", ":")))
             return 0 if ok else 1
         report = audit(Path(args.root), sdist=args.sdist)

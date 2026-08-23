@@ -1,8 +1,12 @@
 include LICENSE
+include CHANGELOG.md
+include CODE_OF_CONDUCT.md
 include CONTRIBUTING.md
 include PROVENANCE.md
 include README.md
+include RELEASING.md
 include SECURITY.md
+include SUPPORT.md
 include THREAT_MODEL.md
 include schema/receipt.schema.json
 include scripts/privacy_audit.py
