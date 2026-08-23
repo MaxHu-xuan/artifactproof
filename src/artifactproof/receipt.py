@@ -406,16 +406,24 @@ def write_receipt(
                 pass
 
 
-def _receipt_file_identity(metadata: os.stat_result) -> Tuple[int, ...]:
-    return (
+def _receipt_file_identity(
+    metadata: os.stat_result, *, platform_name: Optional[str] = None
+) -> Tuple[int, ...]:
+    identity = (
         metadata.st_dev,
         metadata.st_ino,
         metadata.st_mode,
-        metadata.st_nlink,
         metadata.st_size,
         metadata.st_mtime_ns,
-        metadata.st_ctime_ns,
     )
+    # On Windows, Python 3.14 can report st_nlink and st_ctime_ns differently
+    # for path-based stat() and descriptor-based fstat() calls on the same file.
+    # Keep the same stable identity fields used by digest_file there; the file
+    # index, size and modification time still detect replacement or mutation.
+    # POSIX retains the stricter link-count and metadata-change checks.
+    if (os.name if platform_name is None else platform_name) == "nt":
+        return identity
+    return identity + (metadata.st_nlink, metadata.st_ctime_ns)
 
 
 def _read_receipt_bytes(path: Path) -> bytes:

@@ -626,6 +626,37 @@ class ArtifactProofTests(unittest.TestCase):
         if os.name == "posix":
             self.assertEqual(stat.S_IMODE(receipt_path.stat().st_mode), 0o600)
 
+    def test_windows_receipt_identity_ignores_only_unstable_metadata(self) -> None:
+        fields = {
+            "st_dev": 1,
+            "st_ino": 2,
+            "st_mode": stat.S_IFREG | 0o600,
+            "st_nlink": 1,
+            "st_size": 3,
+            "st_mtime_ns": 4,
+            "st_ctime_ns": 5,
+        }
+        baseline = mock.Mock(**fields)
+        windows_identity = receipt_module._receipt_file_identity(
+            baseline, platform_name="nt"
+        )
+        for field in ("st_nlink", "st_ctime_ns"):
+            changed = mock.Mock(**{**fields, field: fields[field] + 1})
+            self.assertEqual(
+                receipt_module._receipt_file_identity(changed, platform_name="nt"),
+                windows_identity,
+            )
+            self.assertNotEqual(
+                receipt_module._receipt_file_identity(changed, platform_name="posix"),
+                receipt_module._receipt_file_identity(baseline, platform_name="posix"),
+            )
+        for field in ("st_dev", "st_ino", "st_mode", "st_size", "st_mtime_ns"):
+            changed = mock.Mock(**{**fields, field: fields[field] + 1})
+            self.assertNotEqual(
+                receipt_module._receipt_file_identity(changed, platform_name="nt"),
+                windows_identity,
+            )
+
     def test_failed_atomic_replace_cleans_temporary_file(self) -> None:
         receipt = create_receipt(self.artifact, {}, KEY, "test-key")
         receipt_path = self.root / "receipt.json"
