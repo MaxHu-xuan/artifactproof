@@ -9,4 +9,5 @@ include SECURITY.md
 include SUPPORT.md
 include THREAT_MODEL.md
 include schema/receipt.schema.json
+include scripts/canonicalize_sdist.py
 include scripts/privacy_audit.py

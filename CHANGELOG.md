@@ -12,4 +12,6 @@ versioning once a public release is published.
 - Provide stable, values-free CLI errors and a pre-publication privacy audit.
 - Allow callers to replace a sensitive PPTX basename with a signed logical
   artifact name while keeping verification content-based.
+- Add a cross-platform release gate that removes build-account metadata from
+  source archives and fixes wheel timestamps to a public project epoch.
 - Test Python 3.11 through 3.14 across Linux, macOS, and Windows.
