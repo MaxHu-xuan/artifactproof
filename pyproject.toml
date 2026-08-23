@@ -13,10 +13,17 @@ license-files = ["LICENSE"]
 dependencies = []
 keywords = [
   "artifact-integrity",
+  "artifact-verification",
+  "file-integrity",
+  "hmac",
+  "offline-verification",
+  "powerpoint",
   "quality-assurance",
   "pptx",
+  "pptx-validation",
   "receipts",
   "supply-chain-security",
+  "tamper-evident",
 ]
 classifiers = [
   "Development Status :: 3 - Alpha",

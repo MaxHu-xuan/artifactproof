@@ -15,6 +15,33 @@ scratch and use only synthetic fixtures.
 ArtifactProof is licensed under the Apache License, Version 2.0. See
 [`LICENSE`](LICENSE).
 
+## What problem does ArtifactProof solve? / 它解决什么问题？
+
+When an AI agent, document generator, or CI pipeline creates a PowerPoint file,
+a successful QA run does not by itself prove that the delivered file contains
+the same bytes that were checked. ArtifactProof is an offline PPTX integrity
+checker and tamper-evident QA receipt generator. It binds the exact presentation,
+named evidence files, and a machine-readable check result into one HMAC-signed
+receipt.
+
+当 AI Agent、文档生成器或自动化流水线产出 PowerPoint 时，“检查通过”并不能单独证明
+最终交付的文件就是当时被检查的那一份。ArtifactProof 提供离线 PPTX 结构校验和防篡改
+质量凭证，把演示文稿的精确字节、外部验收证据以及机器可读的检查结果绑定在同一份
+HMAC 签名收据中。
+
+Typical uses include:
+
+- checking a generated `.pptx` package before an automated delivery step;
+- detecting replacement or mutation between QA, review, archival, and delivery;
+- binding render manifests, accessibility reports, or other external QA evidence
+  to the exact presentation that was checked;
+- giving a later verifier a deterministic, network-free integrity check.
+
+ArtifactProof is deliberately narrower than a PowerPoint design reviewer,
+Office renderer, antivirus scanner, document fact-checker, or delivery tracker.
+Those systems can produce evidence for ArtifactProof to bind, but ArtifactProof
+does not claim to replace them.
+
 ## Project status
 
 Version 0.1.0 is a review-ready pre-release. The receipt schema is explicit,
@@ -64,7 +91,7 @@ the host operating system.
 | Linux and macOS | New receipts are written with mode `0600` | Atomic replacement uses `os.replace` on the destination filesystem. |
 | Windows | Receipts inherit the destination directory's DACL | Keep receipts in an account-private directory; another process holding the destination open can block replacement. |
 
-## Install and local use
+## Quick start on Linux, macOS, and Windows
 
 From the repository root:
 
@@ -120,6 +147,10 @@ The equivalent Windows PowerShell commands can be entered as single lines:
 artifactproof create deck.pptx --evidence slides=render-manifest.json --receipt deck.receipt.json --key-id local-ci
 artifactproof verify deck.pptx --evidence slides=render-manifest.json --receipt deck.receipt.json --expected-key-id local-ci
 ```
+
+Successful CLI operations emit small JSON objects so automation can make a
+deterministic pass/fail decision. Expected failures use stable error codes and
+do not echo the signing key, file contents, or full input paths.
 
 The CLI deliberately has no raw `--key` option. It accepts a key only through
 the selected environment variable (default:
@@ -210,6 +241,49 @@ impossible calendar dates are rejected. Receipt files larger than 1 MiB are
 rejected before JSON parsing. Loading reads at most 1 MiB plus one byte and
 checks file identity before and after the read, so a file that grows or is
 replaced between the initial metadata check and open fails closed.
+
+## Frequently asked questions / 常见问题
+
+### Is ArtifactProof a PowerPoint validator?
+
+It is a conservative structural validator for Transitional OOXML `.pptx`
+packages. It checks ZIP and core OPC relationships without opening Microsoft
+Office or extracting the archive. It is not a complete ECMA-376 conformance
+checker and it does not score slide design.
+
+### Why use a receipt instead of only a SHA-256 checksum?
+
+A checksum detects a byte change only when the verifier already has a trusted
+reference checksum. ArtifactProof signs structured metadata that includes the
+artifact digest, evidence digests, and QA result. A verifier with the shared
+HMAC key can check that binding. HMAC does not provide public verification,
+encryption, timestamp authority, or non-repudiation.
+
+### Does ArtifactProof upload or send a presentation?
+
+No. The shipped runtime uses only the Python standard library and has no network
+client. Artifact and evidence contents stay on the caller's machine. Receipt
+metadata includes the artifact basename, logical evidence names, and `key_id`,
+so callers should still choose non-sensitive names.
+
+### Does it work on Windows, macOS, and Linux?
+
+Yes. CI exercises supported Python versions across all three operating systems.
+The verification format is platform-independent. On Windows, receipt privacy
+depends on the destination directory's DACL rather than POSIX `0600` mode, and
+an open destination file may prevent atomic replacement.
+
+### Can it validate PDF, DOCX, images, or arbitrary generated files?
+
+Version 0.1.0 ships a PPTX adapter and the CLI uses that adapter. Python callers
+can provide a custom `qa_runner`, but additional formats need their own threat
+model and tests; this repository does not claim built-in validation for them.
+
+### Can it prove that a presentation is visually good or factually correct?
+
+No. Use a renderer, visual review, accessibility checker, or fact-checking
+system for those questions. Their result files can be supplied as named evidence
+so the receipt later proves which exact evidence accompanied which exact PPTX.
 
 ## Development
 
