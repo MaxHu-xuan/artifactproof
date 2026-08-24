@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "artifactproof"
 version = "0.1.0"
-description = "Verify offline that a PowerPoint presentation still matches its HMAC-signed structural QA receipt"
+description = "Confirm offline that a delivered PowerPoint file is the same PPTX that passed structural checks."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"

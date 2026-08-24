@@ -1,4 +1,4 @@
-# ArtifactProof（交付物验真）
+# ArtifactProof（PPTX 交付物验真）
 
 [![CI](https://github.com/MaxHu-xuan/artifactproof/actions/workflows/ci.yml/badge.svg)](https://github.com/MaxHu-xuan/artifactproof/actions/workflows/ci.yml)
 
