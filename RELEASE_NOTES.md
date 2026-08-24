@@ -1,7 +1,6 @@
-# ArtifactProof 0.1.0 release notes
+# ArtifactProof v0.1.0 release notes
 
-Status: unpublished release draft. No tag, package-index upload, or GitHub
-release is implied by this file.
+Release date: 2026-08-25.
 
 ## What this release is for
 
@@ -33,7 +32,7 @@ validate their conclusions.
 - Source-tree, source-archive, and release privacy checks, plus deterministic
   source-archive canonicalization.
 
-## Try the release candidate locally
+## Try the release locally
 
 From a reviewed source checkout with Python 3.11 or newer:
 
@@ -65,10 +64,10 @@ real receipts.
   non-repudiation.
 - The CLI and Python API may still change before 1.0.
 
-## Publication checklist for maintainers
+## Release integrity
 
-Before publishing, complete every step in [`RELEASING.md`](RELEASING.md),
-review the exact distribution contents, and record SHA-256 checksums for the
-approved wheel and canonical source archive. Checksums are intentionally not
-listed in this draft because they must be calculated from the exact artifacts
-selected for release.
+Maintainers follow every step in [`RELEASING.md`](RELEASING.md), review the
+exact distribution contents, and publish SHA-256 checksums for the approved
+wheel, canonical source archive, and SBOM as an external `SHA256SUMS` release
+asset. The hashes are deliberately kept outside the source distribution so
+recording them cannot change the archive they describe.
