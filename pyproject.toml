@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "artifactproof"
 version = "0.1.0"
-description = "Confirm offline that a delivered PowerPoint file is the same PPTX that passed structural checks."
+description = "Verify locally that a final PPTX and its supplied QA evidence still match an HMAC-signed receipt created after structural checks."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
@@ -41,6 +41,7 @@ classifiers = [
 [project.urls]
 Homepage = "https://github.com/MaxHu-xuan/artifactproof"
 Repository = "https://github.com/MaxHu-xuan/artifactproof"
+Documentation = "https://github.com/MaxHu-xuan/artifactproof#readme"
 Issues = "https://github.com/MaxHu-xuan/artifactproof/issues"
 Changelog = "https://github.com/MaxHu-xuan/artifactproof/blob/main/CHANGELOG.md"
 Security = "https://github.com/MaxHu-xuan/artifactproof/security/policy"

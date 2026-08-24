@@ -14,7 +14,9 @@ Sanitize test output and issue reports before sharing them publicly.
 Run the local tests before opening a contribution:
 
 ```bash
+PYTHONDONTWRITEBYTECODE=1 python3 examples/run_demo.py
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m unittest discover -s tests -v
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/canonicalize_sdist.py --self-test
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/privacy_audit.py
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/privacy_audit.py --self-test
 ```

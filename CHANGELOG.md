@@ -3,7 +3,7 @@
 All notable changes will be recorded here. This project uses semantic
 versioning once a public release is published.
 
-## 0.1.0 (release candidate)
+## 0.1.0 - Unreleased
 
 - Create and verify HMAC-SHA256 receipts bound to artifact and evidence hashes.
 - Add conservative, dependency-free PPTX package checks.
@@ -17,3 +17,7 @@ versioning once a public release is published.
 - Keep source-swap protection on Windows while avoiding incompatible
   path-stat and open-handle timestamp comparisons.
 - Test Python 3.11 through 3.14 across Linux, macOS, and Windows.
+- Add a byte-for-byte deterministic synthetic PPTX demo that runs the real CLI
+  through receipt creation, successful verification, and tamper detection.
+- Add separate Chinese and English first-run guidance, platform-specific
+  commands, project navigation, and draft release notes.
