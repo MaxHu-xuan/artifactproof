@@ -4,6 +4,7 @@ include CODE_OF_CONDUCT.md
 include CONTRIBUTING.md
 include PROVENANCE.md
 include README.md
+include RELEASE_NOTES.md
 include RELEASING.md
 include SECURITY.md
 include SUPPORT.md
@@ -11,3 +12,4 @@ include THREAT_MODEL.md
 include schema/receipt.schema.json
 include scripts/canonicalize_sdist.py
 include scripts/privacy_audit.py
+recursive-include examples *.md *.py

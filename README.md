@@ -4,20 +4,61 @@
 
 [中文说明](#中文说明) · [English overview](#english-overview) · [Technical reference](#technical-reference)
 
+[ArtifactProof](https://github.com/MaxHu-xuan/artifactproof) · [TaskStateGuard](https://github.com/MaxHu-xuan/task-state-guard) · [ChatArchiveGuard](https://github.com/MaxHu-xuan/chat-archive-guard)
+
 ## 中文说明
 
-### ArtifactProof 解决什么问题？
+### 检查通过的 PPTX，交付时还是同一份吗？
 
 一份 PPTX 通过检查后，可能还要经历审批、重命名、上传、下载和转发。到了真正交付时，
-怎样确认它仍是当时检查过的那一份？
+文件名可能没变，文件内容却已经被替换；也可能拿着正确的质检报告，发出的却是另一版。
 
-ArtifactProof 是一个本地、离线的 PowerPoint（.pptx）交付物验真工具。它不依赖文件名或
-修改时间，而是根据文件内容计算 SHA-256 校验值，把结构检查结果和外部质检证据写入一份
-HMAC-SHA256 签名收据。以后再次验证时，只要 PPTX、证据文件或收据发生不一致，验证就会
-失败。
+ArtifactProof 在本地为最终 PPTX 计算 SHA-256，执行基础结构检查，并把调用方选择的外部
+质检证据一起绑定到 HMAC-SHA256 收据。交付前或接收后再次验证，可以确认当前 PPTX 与
+提供的证据字节是否仍和该收据记录一致。
 
-它适合补上 PPTX 质量检查与最终交付之间的完整性缺口，让检查结果对应到准确的文件，
-而不是只靠文件名或聊天记录判断。
+它不上传文件，也不依赖文件名和修改时间。它不是通用数字签名系统，不做完整 OOXML 语义
+验证，也不判断设计美感；它专注于补上 PPTX 基础结构检查、外部 QA 证据与最终交付文件
+之间的完整性缺口。
+
+### 60 秒试跑
+
+需要 Python 3.11 或更高版本。演示不需要安装、不访问网络，也不读取你的 PPTX 或密钥；
+它只在临时目录生成一页合成演示稿，运行真实的 `create` 和 `verify` 命令，再确认文件被
+改动后验证会失败。
+
+Linux 或 macOS：
+
+```bash
+python3 examples/run_demo.py
+```
+
+Windows PowerShell：
+
+```powershell
+py -3 examples\run_demo.py
+```
+
+预期输出：
+
+```json
+{"evidence":"synthetic-review.json","ok":true,"operation":"generate","pptx":"synthetic-deck.pptx"}
+{"ok":true,"operation":"create","qa":"pass","receipt_written":true}
+{"ok":true,"operation":"verify","verified":true}
+{"detected":true,"ok":true,"operation":"tamper-check"}
+```
+
+最后一行表示篡改已被发现，不表示演示稿通过了视觉审查或已经真实送达。演示输入的生成
+方式和数据边界见 [`examples/README.md`](examples/README.md)。生成器不会覆盖已有路径；
+若生成中途失败，它可能保留已经创建的纯合成文件，避免误删被并发进程替换的同名内容。
+
+### 三个项目怎么选？
+
+| 你要解决的问题 | 项目 |
+| --- | --- |
+| 确认最终 PPTX 及随附验收证据仍匹配结构检查后生成的 HMAC 签名收据 | [ArtifactProof（PPTX 交付物验真）](https://github.com/MaxHu-xuan/artifactproof) |
+| 重启后核对卡住任务、超时与待投递状态，不把未知结果猜成成功 | [TaskStateGuard（任务状态守护）](https://github.com/MaxHu-xuan/task-state-guard) |
+| 分享或迁移聊天导出前，本地检查疑似秘密、个人信息形态、格式、SQLite 与扫描盲区 | [ChatArchiveGuard（聊天归档守护）](https://github.com/MaxHu-xuan/chat-archive-guard) |
 
 ### 适用场景
 
@@ -43,7 +84,7 @@ HMAC-SHA256 签名收据。以后再次验证时，只要 PPTX、证据文件或
 但调用方仍须确保名称不含敏感信息。证据逻辑名称和 `key_id` 也会写入收据，同样不应包含
 敏感信息。
 
-### 快速开始
+### 用于你自己的 PPTX
 
 #### 1. 安装并设置签名密钥
 
@@ -52,14 +93,17 @@ HMAC-SHA256 签名收据。以后再次验证时，只要 PPTX、证据文件或
 Linux 或 macOS：
 
 ```bash
-python3 -m pip install .
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install .
 export ARTIFACTPROOF_SIGNING_KEY='base64:REPLACE_WITH_BASE64_KEY'
 ```
 
 Windows PowerShell：
 
 ```powershell
-py -3.11 -m pip install .
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install .
 $env:ARTIFACTPROOF_SIGNING_KEY = 'base64:REPLACE_WITH_BASE64_KEY'
 ```
 
@@ -81,7 +125,7 @@ artifactproof create deck.pptx \
 Windows PowerShell：
 
 ```powershell
-artifactproof create deck.pptx --artifact-name approved-deck.pptx --evidence render=render-manifest.json --receipt deck.receipt.json --key-id local-ci
+.\.venv\Scripts\python.exe -m artifactproof create deck.pptx --artifact-name approved-deck.pptx --evidence render=render-manifest.json --receipt deck.receipt.json --key-id local-ci
 ```
 
 没有外部报告时可以省略 `--evidence`。如果创建收据时绑定了证据，验证时必须提供逻辑名称
@@ -103,11 +147,28 @@ artifactproof verify deck.pptx \
 Windows PowerShell：
 
 ```powershell
-artifactproof verify deck.pptx --evidence render=render-manifest.json --receipt deck.receipt.json --expected-key-id local-ci
+.\.venv\Scripts\python.exe -m artifactproof verify deck.pptx --evidence render=render-manifest.json --receipt deck.receipt.json --expected-key-id local-ci
 ```
 
 创建与验证必须使用同一把签名密钥。成功时命令会返回简短的 JSON；PPTX、证据、签名或
 预期的密钥标识不一致时会返回失败。
+
+### Linux、macOS 与 Windows 命令差异
+
+收据格式和验证结论跨平台一致，主要差异在 Python 启动命令、虚拟环境激活、环境变量和
+多行命令写法。
+
+| 操作 | Linux | macOS | Windows PowerShell |
+| --- | --- | --- | --- |
+| 启动 Python | `python3` | `python3` | `py -3` |
+| 创建虚拟环境 | `python3 -m venv .venv` | `python3 -m venv .venv` | `py -3 -m venv .venv` |
+| 激活虚拟环境 | `source .venv/bin/activate` | `source .venv/bin/activate` | `.\.venv\Scripts\Activate.ps1` |
+| 设置签名密钥 | `export ARTIFACTPROOF_SIGNING_KEY='…'` | `export ARTIFACTPROOF_SIGNING_KEY='…'` | `$env:ARTIFACTPROOF_SIGNING_KEY = '…'` |
+| 拆分长命令 | 行末使用 `\` | 行末使用 `\` | 行末使用反引号，或使用单行命令 |
+
+Linux 和 macOS 上，新收据使用 `0600` 权限。Windows 没有相同的 POSIX 权限位，收据继承
+目标目录的 DACL；应将它保存到只允许预期账户访问的目录。路径分隔符只用于命令输入，
+收据结构本身不保存源路径。
 
 ### ArtifactProof 能验证什么，不能验证什么？
 
@@ -171,21 +232,64 @@ HMAC 适合持有同一共享密钥的团队。它不能区分共享该密钥的
 
 ## English Overview
 
-### What problem does ArtifactProof solve?
+### Is the delivered PPTX still the file that passed review?
 
 A PPTX may pass review and then move through approval, renaming, upload,
-download, and delivery. How can the recipient confirm that the final file is
-still the exact presentation that passed the earlier check?
+download, and delivery. The filename may stay the same while the bytes change,
+or the correct QA report may be sent with a different revision.
 
-ArtifactProof is a local, offline artifact verification tool for PowerPoint
-(.pptx) files. It uses the file contents rather than the filename or
-modification time. The tool records a SHA-256 checksum, structural QA result,
-and optional evidence in an HMAC-SHA256-signed receipt. Later verification
-fails if the presentation, declared evidence, or receipt no longer matches.
+ArtifactProof hashes the final PPTX locally, runs basic structural checks, and
+binds caller-selected external QA evidence into an HMAC-SHA256 receipt. Verify
+again before delivery or after receipt to confirm that the current PPTX and
+supplied evidence bytes still match that receipt.
 
-It closes the integrity gap between PPTX quality review and final delivery by
-keeping the review result tied to the exact file rather than relying on a
-filename or chat record.
+It uploads nothing and does not rely on filenames or modification times. It is
+not a general digital-signature system, a complete OOXML semantic validator,
+or a judge of visual quality. Its scope is the integrity gap between basic PPTX
+structure checks, external QA evidence, and the final delivery file.
+
+### Try it in 60 seconds
+
+Python 3.11 or newer is required. The demo needs no installation, network
+access, real PPTX, or private key. It generates a one-slide synthetic deck in a
+temporary directory, runs the real `create` and `verify` commands, changes the
+temporary file, and confirms that verification fails.
+
+Linux or macOS:
+
+```bash
+python3 examples/run_demo.py
+```
+
+Windows PowerShell:
+
+```powershell
+py -3 examples\run_demo.py
+```
+
+Expected output:
+
+```json
+{"evidence":"synthetic-review.json","ok":true,"operation":"generate","pptx":"synthetic-deck.pptx"}
+{"ok":true,"operation":"create","qa":"pass","receipt_written":true}
+{"ok":true,"operation":"verify","verified":true}
+{"detected":true,"ok":true,"operation":"tamper-check"}
+```
+
+The last line means that the byte change was detected. It does not claim that
+the demo deck passed visual review or reached a recipient. See
+[`examples/README.md`](examples/README.md) for the generator and data boundary.
+The generator never overwrites an existing path. If generation fails partway,
+it may leave a synthetic output in place rather than risk deleting a path that
+another process replaced concurrently.
+
+### Which project should I use?
+
+| Your problem | Project |
+| --- | --- |
+| Verify that a final PPTX and its supplied QA evidence still match the HMAC-signed receipt created after structural checks | [ArtifactProof](https://github.com/MaxHu-xuan/artifactproof) |
+| After a restart, reconcile stuck tasks, timeouts, and pending delivery without guessing success | [TaskStateGuard](https://github.com/MaxHu-xuan/task-state-guard) |
+| Before sharing or migrating a chat export, locally audit potential secrets, personal-data patterns, format or SQLite issues, and scan gaps | [ChatArchiveGuard](https://github.com/MaxHu-xuan/chat-archive-guard) |
 
 ### When should you use it?
 
@@ -220,7 +324,7 @@ the caller remains responsible for keeping it non-sensitive. Logical evidence
 names and `key_id` are also stored in the receipt and should not contain
 sensitive information.
 
-### Quick start
+### Use it with your own PPTX
 
 #### 1. Install and set a signing key
 
@@ -230,14 +334,17 @@ install it from a reviewed source checkout.
 Linux or macOS:
 
 ```bash
-python3 -m pip install .
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install .
 export ARTIFACTPROOF_SIGNING_KEY='base64:REPLACE_WITH_BASE64_KEY'
 ```
 
 Windows PowerShell:
 
 ```powershell
-py -3.11 -m pip install .
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install .
 $env:ARTIFACTPROOF_SIGNING_KEY = 'base64:REPLACE_WITH_BASE64_KEY'
 ```
 
@@ -261,7 +368,7 @@ artifactproof create deck.pptx \
 Windows PowerShell:
 
 ```powershell
-artifactproof create deck.pptx --artifact-name approved-deck.pptx --evidence render=render-manifest.json --receipt deck.receipt.json --key-id local-ci
+.\.venv\Scripts\python.exe -m artifactproof create deck.pptx --artifact-name approved-deck.pptx --evidence render=render-manifest.json --receipt deck.receipt.json --key-id local-ci
 ```
 
 Omit `--evidence` when there is no external report. If evidence is bound during
@@ -284,12 +391,31 @@ artifactproof verify deck.pptx \
 Windows PowerShell:
 
 ```powershell
-artifactproof verify deck.pptx --evidence render=render-manifest.json --receipt deck.receipt.json --expected-key-id local-ci
+.\.venv\Scripts\python.exe -m artifactproof verify deck.pptx --evidence render=render-manifest.json --receipt deck.receipt.json --expected-key-id local-ci
 ```
 
 Creation and verification must use the same signing key. A successful command
 returns a small JSON object. A mismatch in the PPTX, evidence, signature, or
 expected key identifier returns a failure.
+
+### Linux, macOS, and Windows command differences
+
+The receipt format and verification result are platform-independent. The main
+differences are the Python launcher, virtual-environment activation,
+environment-variable syntax, and multiline command syntax.
+
+| Action | Linux | macOS | Windows PowerShell |
+| --- | --- | --- | --- |
+| Start Python | `python3` | `python3` | `py -3` |
+| Create a virtual environment | `python3 -m venv .venv` | `python3 -m venv .venv` | `py -3 -m venv .venv` |
+| Activate it | `source .venv/bin/activate` | `source .venv/bin/activate` | `.\.venv\Scripts\Activate.ps1` |
+| Set the signing key | `export ARTIFACTPROOF_SIGNING_KEY='…'` | `export ARTIFACTPROOF_SIGNING_KEY='…'` | `$env:ARTIFACTPROOF_SIGNING_KEY = '…'` |
+| Split a long command | End the line with `\` | End the line with `\` | End the line with a backtick, or keep the command on one line |
+
+New receipts use mode `0600` on Linux and macOS. Windows has no equivalent
+POSIX mode bit, so the receipt inherits the destination directory's DACL; use a
+directory restricted to the intended account. Path separators affect command
+input only. The receipt does not store the source path.
 
 ### What can ArtifactProof verify, and where does it stop?
 
@@ -537,30 +663,85 @@ replaced between the initial metadata check and open fails closed.
 
 Run the synthetic test suite without installing the package:
 
+Linux or macOS:
+
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
+Windows PowerShell:
+
+```powershell
+$previousPythonPath = $env:PYTHONPATH
+$env:PYTHONDONTWRITEBYTECODE = "1"
+$env:PYTHONUTF8 = "1"
+$env:PYTHONPATH = "src"
+py -3 -m unittest discover -s tests -v
+$env:PYTHONPATH = $previousPythonPath
+```
+
+Run the privacy-safe source-archive canonicalizer self-test:
+
+Linux or macOS:
+
+```bash
+python3 scripts/canonicalize_sdist.py --self-test
+```
+
+Windows PowerShell:
+
+```powershell
+py -3 scripts\canonicalize_sdist.py --self-test
+```
+
 Run the values-free publication audit against the exact release tree:
+
+Linux or macOS:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/privacy_audit.py
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/privacy_audit.py --self-test
 ```
 
+Windows PowerShell:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE = "1"
+$env:PYTHONUTF8 = "1"
+py -3 scripts\privacy_audit.py
+py -3 scripts\privacy_audit.py --self-test
+```
+
 Audit an extracted source distribution with the explicit sdist profile:
+
+Linux or macOS:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/privacy_audit.py \
   --sdist unpacked/artifactproof-0.1.0
 ```
 
+Windows PowerShell:
+
+```powershell
+py -3 scripts\privacy_audit.py --sdist unpacked\artifactproof-0.1.0
+```
+
 When running the audit copy contained inside an extracted sdist, also pass the
 profile to its self-test:
+
+Linux or macOS:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/privacy_audit.py --sdist
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/privacy_audit.py --sdist --self-test
+```
+
+Windows PowerShell:
+
+```powershell
+py -3 scripts\privacy_audit.py --sdist
+py -3 scripts\privacy_audit.py --sdist --self-test
 ```
 
 The sdist profile permits and scans only the generated
@@ -574,6 +755,9 @@ source tree.
 
 Audit findings contain only relative paths, stable codes, and counts. Matching
 content, credentials, personal data, and absolute input paths are never emitted.
+
+See [`RELEASING.md`](RELEASING.md) for copyable Linux, macOS, and Windows
+PowerShell build and source-archive canonicalization commands.
 
 CI runs all supported Python versions (3.11 through 3.14) on Ubuntu, plus the
 oldest and newest supported versions on macOS and Windows. Symlink tests are

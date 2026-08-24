@@ -10,4 +10,5 @@ Desktop.ini
 .pytest_cache/
 build/
 dist/
+demo-output/
 *.receipt.json

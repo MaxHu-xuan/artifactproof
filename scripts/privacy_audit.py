@@ -19,6 +19,10 @@ from typing import Counter, Dict, Iterator, Optional, Sequence, Tuple
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_LICENSE_SHA256 = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+EXPECTED_PROJECT_DESCRIPTION = (
+    "Verify locally that a final PPTX and its supplied QA evidence still match "
+    "an HMAC-signed receipt created after structural checks."
+)
 MAX_FILE_BYTES = 1_048_576
 SKIP_DIRS = frozenset((".git",))
 SDIST_EGG_INFO = "src/artifactproof.egg-info"
@@ -41,8 +45,10 @@ TEXT_SUFFIXES = frozenset(
 TEXT_NAMES = frozenset((".gitignore", "LICENSE", "MANIFEST.in"))
 REQUIRED_FILES = (
     "CHANGELOG.md", "CODE_OF_CONDUCT.md", "CONTRIBUTING.md", "LICENSE",
-    "MANIFEST.in", "PROVENANCE.md", "README.md", "RELEASING.md",
-    "SECURITY.md", "SUPPORT.md", "THREAT_MODEL.md", "pyproject.toml",
+    "MANIFEST.in", "PROVENANCE.md", "README.md", "RELEASE_NOTES.md",
+    "RELEASING.md", "SECURITY.md", "SUPPORT.md", "THREAT_MODEL.md",
+    "examples/README.md", "examples/generate_demo.py", "examples/run_demo.py",
+    "pyproject.toml",
     "scripts/canonicalize_sdist.py", "scripts/privacy_audit.py",
 )
 
@@ -154,6 +160,11 @@ def _metadata_checks(root: Path, findings: Counter[Tuple[str, str]]) -> None:
     for pattern, code in checks:
         if not re.search(pattern, metadata):
             findings[(("pyproject.toml"), code)] += 1
+    expected_description_line = (
+        'description = "' + EXPECTED_PROJECT_DESCRIPTION + '"'
+    )
+    if expected_description_line not in metadata.splitlines():
+        findings[("pyproject.toml", "metadata.project_description_mismatch")] += 1
 
     try:
         manifest = (root / "MANIFEST.in").read_text(encoding="utf-8")
@@ -161,8 +172,10 @@ def _metadata_checks(root: Path, findings: Counter[Tuple[str, str]]) -> None:
         return
     for entry in (
         "include LICENSE",
+        "include RELEASE_NOTES.md",
         "include scripts/canonicalize_sdist.py",
         "include scripts/privacy_audit.py",
+        "recursive-include examples *.md *.py",
     ):
         if entry not in manifest.splitlines():
             findings[("MANIFEST.in", "metadata.sdist_entry_missing")] += 1
@@ -246,6 +259,27 @@ def _report(findings: Counter[Tuple[str, str]], files_scanned: int) -> Dict[str,
 def self_test(root: Path = PROJECT_ROOT, sdist: bool = False) -> bool:
     if not audit(root, sdist=sdist)["ok"]:
         return False
+    with tempfile.TemporaryDirectory() as directory:
+        synthetic_root = Path(directory)
+        try:
+            license_bytes = (PROJECT_ROOT / "LICENSE").read_bytes()
+            metadata = (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            return False
+        (synthetic_root / "LICENSE").write_bytes(license_bytes)
+        (synthetic_root / "pyproject.toml").write_text(
+            metadata.replace(
+                EXPECTED_PROJECT_DESCRIPTION,
+                "synthetic mismatched project description",
+            ),
+            encoding="utf-8",
+        )
+        metadata_findings: Counter[Tuple[str, str]] = collections.Counter()
+        _metadata_checks(synthetic_root, metadata_findings)
+        if metadata_findings[
+            ("pyproject.toml", "metadata.project_description_mismatch")
+        ] != 1:
+            return False
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         values = (
