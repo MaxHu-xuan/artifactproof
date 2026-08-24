@@ -14,4 +14,6 @@ versioning once a public release is published.
   artifact name while keeping verification content-based.
 - Add a cross-platform release gate that removes build-account metadata from
   source archives and fixes wheel timestamps to a public project epoch.
+- Keep source-swap protection on Windows while avoiding incompatible
+  path-stat and open-handle timestamp comparisons.
 - Test Python 3.11 through 3.14 across Linux, macOS, and Windows.
