@@ -1,9 +1,8 @@
 # Changelog
 
-All notable changes will be recorded here. This project uses semantic
-versioning once a public release is published.
+All notable changes are recorded here. This project uses semantic versioning.
 
-## 0.1.0 - Unreleased
+## 0.1.0 - 2026-08-25
 
 - Create and verify HMAC-SHA256 receipts bound to artifact and evidence hashes.
 - Add conservative, dependency-free PPTX package checks.
@@ -20,4 +19,4 @@ versioning once a public release is published.
 - Add a byte-for-byte deterministic synthetic PPTX demo that runs the real CLI
   through receipt creation, successful verification, and tamper detection.
 - Add separate Chinese and English first-run guidance, platform-specific
-  commands, project navigation, and draft release notes.
+  commands, project navigation, and release notes.

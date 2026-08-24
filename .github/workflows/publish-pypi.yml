@@ -1,0 +1,394 @@
+name: Publish verified release to PyPI
+
+on:
+  release:
+    types:
+      - published
+
+permissions: {}
+
+concurrency:
+  group: artifactproof-pypi-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  verify-release:
+    name: Verify immutable release input
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUTF8: "1"
+      SOURCE_DATE_EPOCH: "946684800"
+    steps:
+      - name: Check out the released tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      - name: Verify release event, version, tag, and main ancestry
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import tomllib
+          from pathlib import Path
+
+          event = json.loads(
+              Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8")
+          )
+          release = event.get("release")
+          if not isinstance(release, dict):
+              raise SystemExit("release gate: missing release payload")
+          if event.get("action") != "published":
+              raise SystemExit("release gate: event is not published")
+          if release.get("draft") is not False:
+              raise SystemExit("release gate: draft release rejected")
+          if release.get("prerelease") is not False:
+              raise SystemExit("release gate: prerelease rejected")
+
+          with Path("pyproject.toml").open("rb") as handle:
+              version = tomllib.load(handle)["project"]["version"]
+          expected_tag = f"v{version}"
+          actual_tag = release.get("tag_name")
+          if actual_tag != expected_tag:
+              raise SystemExit("release gate: tag does not match project version")
+          if os.environ.get("GITHUB_REF") != f"refs/tags/{expected_tag}":
+              raise SystemExit("release gate: workflow ref does not match release tag")
+          if os.environ.get("GITHUB_REF_TYPE") != "tag":
+              raise SystemExit("release gate: workflow ref is not a tag")
+          if os.environ.get("GITHUB_REF_NAME") != expected_tag:
+              raise SystemExit("release gate: workflow tag name mismatch")
+          if os.environ.get("GITHUB_WORKFLOW_SHA") != os.environ.get("GITHUB_SHA"):
+              raise SystemExit("release gate: workflow revision mismatch")
+          print(f"release metadata: PASS ({expected_tag})")
+          PY
+
+          test "$(git rev-parse 'HEAD^{commit}')" = "$GITHUB_SHA"
+          test "$(git rev-list -n 1 "$GITHUB_REF_NAME")" = "$GITHUB_SHA"
+          git rev-parse --verify refs/remotes/origin/main >/dev/null
+          git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main
+
+      - name: Run source privacy and canonicalizer self-tests
+        run: |
+          python scripts/privacy_audit.py
+          python scripts/privacy_audit.py --self-test
+          python scripts/canonicalize_sdist.py --self-test
+
+      - name: Download and verify the exact release bundle
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import tomllib
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from pathlib import Path
+
+          workspace = Path(os.environ["GITHUB_WORKSPACE"])
+          destination = workspace / "release-assets"
+          destination.mkdir(mode=0o700)
+
+          event = json.loads(
+              Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8")
+          )
+          release = event["release"]
+          with (workspace / "pyproject.toml").open("rb") as handle:
+              project = tomllib.load(handle)["project"]
+          name = project["name"]
+          version = project["version"]
+          wheel_name = f"{name}-{version}-py3-none-any.whl"
+          sdist_name = f"{name}-{version}.tar.gz"
+          sbom_name = f"{name}-{version}.cdx.json"
+          expected_names = {
+              "SOURCE_COMMIT",
+              "SHA256SUMS",
+              sbom_name,
+              wheel_name,
+              sdist_name,
+          }
+          size_limits = {
+              "SOURCE_COMMIT": 100,
+              "SHA256SUMS": 4096,
+              sbom_name: 1024 * 1024,
+              wheel_name: 16 * 1024 * 1024,
+              sdist_name: 16 * 1024 * 1024,
+          }
+          max_total_bytes = sum(size_limits.values())
+
+          assets = release.get("assets")
+          if not isinstance(assets, list) or len(assets) != len(expected_names):
+              raise SystemExit("release bundle: asset count mismatch")
+          if any(not isinstance(asset, dict) for asset in assets):
+              raise SystemExit("release bundle: malformed asset record")
+          asset_names = [asset.get("name") for asset in assets]
+          if any(not isinstance(asset_name, str) for asset_name in asset_names):
+              raise SystemExit("release bundle: malformed asset name")
+          if len(set(asset_names)) != len(asset_names):
+              raise SystemExit("release bundle: duplicate asset name")
+          if set(asset_names) != expected_names:
+              raise SystemExit("release bundle: unexpected or missing asset")
+
+          declared_total = 0
+          for asset in assets:
+              if asset.get("state") != "uploaded":
+                  raise SystemExit("release bundle: incomplete asset rejected")
+              size = asset.get("size")
+              if not isinstance(size, int) or not 0 < size <= size_limits[asset["name"]]:
+                  raise SystemExit("release bundle: invalid asset size")
+              declared_total += size
+          if declared_total > max_total_bytes:
+              raise SystemExit("release bundle: total size limit exceeded")
+
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, request, file_pointer, code, message, headers, new_url):
+                  return None
+
+          token = os.environ.get("GITHUB_TOKEN")
+          if not token:
+              raise SystemExit("release bundle: GitHub token unavailable")
+          repository = os.environ["GITHUB_REPOSITORY"]
+          api_path_prefix = f"/repos/{repository}/releases/assets/"
+          opener = urllib.request.build_opener(NoRedirect)
+
+          def download_asset(asset):
+              api_url = asset.get("url")
+              try:
+                  parsed = urllib.parse.urlparse(api_url or "")
+                  invalid_api_url = (
+                      parsed.scheme != "https"
+                      or parsed.hostname != "api.github.com"
+                      or parsed.username is not None
+                      or parsed.password is not None
+                      or parsed.port is not None
+                      or parsed.query
+                      or parsed.fragment
+                      or re.fullmatch(
+                          re.escape(api_path_prefix) + r"[0-9]+", parsed.path
+                      )
+                      is None
+                  )
+              except (TypeError, ValueError):
+                  invalid_api_url = True
+              if invalid_api_url:
+                  raise SystemExit("release bundle: invalid asset API URL")
+              request = urllib.request.Request(
+                  api_url,
+                  headers={
+                      "Accept": "application/octet-stream",
+                      "Authorization": f"Bearer {token}",
+                      "User-Agent": "artifactproof-release-gate",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  },
+              )
+              response = None
+              try:
+                  response = opener.open(request, timeout=60)
+              except urllib.error.HTTPError as error:
+                  if error.code not in {301, 302, 303, 307, 308}:
+                      error.close()
+                      raise SystemExit("release bundle: asset download failed") from None
+                  location = error.headers.get("Location")
+                  error.close()
+                  try:
+                      redirect = urllib.parse.urlparse(location or "")
+                      invalid_redirect = (
+                          redirect.scheme != "https"
+                          or redirect.hostname is None
+                          or not redirect.hostname.endswith(
+                              ".githubusercontent.com"
+                          )
+                          or redirect.username is not None
+                          or redirect.password is not None
+                          or redirect.port is not None
+                      )
+                  except (TypeError, ValueError):
+                      invalid_redirect = True
+                  if invalid_redirect:
+                      raise SystemExit("release bundle: unsafe asset redirect")
+                  try:
+                      response = opener.open(
+                          urllib.request.Request(
+                              location,
+                              headers={
+                                  "User-Agent": "artifactproof-release-gate"
+                              },
+                          ),
+                          timeout=60,
+                      )
+                  except (OSError, urllib.error.HTTPError, urllib.error.URLError):
+                      raise SystemExit("release bundle: asset download failed") from None
+              except (OSError, urllib.error.URLError):
+                  raise SystemExit("release bundle: asset download failed") from None
+              if getattr(response, "status", None) != 200:
+                  response.close()
+                  raise SystemExit("release bundle: asset download failed")
+              try:
+                  data = response.read(size_limits[asset["name"]] + 1)
+              except OSError:
+                  raise SystemExit("release bundle: asset download failed") from None
+              finally:
+                  response.close()
+              if (
+                  len(data) != asset["size"]
+                  or len(data) > size_limits[asset["name"]]
+              ):
+                  raise SystemExit("release bundle: downloaded size mismatch")
+              target = destination / asset["name"]
+              with target.open("xb") as handle:
+                  handle.write(data)
+              target.chmod(0o600)
+
+          for asset in sorted(assets, key=lambda item: item["name"]):
+              download_asset(asset)
+
+          source_commit = (destination / "SOURCE_COMMIT").read_bytes()
+          expected_commit = os.environ["GITHUB_SHA"].encode("ascii")
+          if source_commit not in {expected_commit, expected_commit + b"\n"}:
+              raise SystemExit("release bundle: source commit mismatch")
+
+          checksum_bytes = (destination / "SHA256SUMS").read_bytes()
+          try:
+              checksum_text = checksum_bytes.decode("ascii")
+          except UnicodeDecodeError:
+              raise SystemExit("release bundle: checksum manifest is not ASCII") from None
+          lines = checksum_text.splitlines()
+          checksum_names = {wheel_name, sdist_name, sbom_name}
+          if len(lines) != len(checksum_names):
+              raise SystemExit("release bundle: checksum entry count mismatch")
+          checksums = {}
+          pattern = re.compile(r"([0-9a-f]{64})  ([A-Za-z0-9][A-Za-z0-9._-]*)")
+          for line in lines:
+              match = pattern.fullmatch(line)
+              if not match or match.group(2) in checksums:
+                  raise SystemExit("release bundle: malformed checksum manifest")
+              checksums[match.group(2)] = match.group(1)
+          if set(checksums) != checksum_names:
+              raise SystemExit("release bundle: checksum names mismatch")
+          for filename, expected_hash in checksums.items():
+              actual_hash = hashlib.sha256((destination / filename).read_bytes()).hexdigest()
+              if actual_hash != expected_hash:
+                  raise SystemExit("release bundle: checksum mismatch")
+
+          try:
+              sbom = json.loads((destination / sbom_name).read_text(encoding="utf-8"))
+              component = sbom["metadata"]["component"]
+          except (KeyError, TypeError, ValueError, UnicodeError):
+              raise SystemExit("release bundle: malformed SBOM") from None
+          if (
+              sbom.get("bomFormat") != "CycloneDX"
+              or sbom.get("specVersion") != "1.6"
+              or component.get("name") != name
+              or component.get("version") != version
+          ):
+              raise SystemExit("release bundle: SBOM identity mismatch")
+
+          print("release bundle: PASS (5 exact assets; 3 checksums verified)")
+          PY
+
+      - name: Verify and audit the canonical source distribution
+        shell: bash
+        run: |
+          mkdir canonical-check sdist-unpacked
+          python scripts/canonicalize_sdist.py \
+            release-assets/artifactproof-0.1.0.tar.gz \
+            canonical-check/artifactproof-0.1.0.tar.gz \
+            --source-date-epoch 946684800
+          cmp -s \
+            release-assets/artifactproof-0.1.0.tar.gz \
+            canonical-check/artifactproof-0.1.0.tar.gz
+          tar -xzf canonical-check/artifactproof-0.1.0.tar.gz -C sdist-unpacked
+          mapfile -t sdist_roots < <(find sdist-unpacked -mindepth 1 -maxdepth 1 -type d -print)
+          test "${#sdist_roots[@]}" -eq 1
+          test "$(find sdist-unpacked -mindepth 1 -maxdepth 1 -print | wc -l)" -eq 1
+          python scripts/privacy_audit.py --sdist "${sdist_roots[0]}"
+          python scripts/privacy_audit.py --sdist --self-test "${sdist_roots[0]}"
+
+      - name: Install and smoke-test the wheel offline
+        shell: bash
+        working-directory: /tmp
+        env:
+          PIP_NO_INDEX: "1"
+          PYTHONPATH: ""
+        run: |
+          python -m venv artifactproof-release-venv
+          artifactproof-release-venv/bin/python -m pip install \
+            --no-index \
+            --no-deps \
+            "$GITHUB_WORKSPACE/release-assets/artifactproof-0.1.0-py3-none-any.whl"
+          test "$(artifactproof-release-venv/bin/artifactproof --version)" = "artifactproof 0.1.0"
+          test "$(artifactproof-release-venv/bin/python -m artifactproof --version)" = "artifactproof 0.1.0"
+
+      - name: Stage only the PyPI distributions
+        shell: bash
+        run: |
+          mkdir pypi-dist
+          cp release-assets/artifactproof-0.1.0-py3-none-any.whl pypi-dist/
+          cp release-assets/artifactproof-0.1.0.tar.gz pypi-dist/
+          python - <<'PY'
+          from pathlib import Path
+
+          expected = {
+              "artifactproof-0.1.0-py3-none-any.whl",
+              "artifactproof-0.1.0.tar.gz",
+          }
+          actual = {path.name for path in Path("pypi-dist").iterdir() if path.is_file()}
+          if actual != expected:
+              raise SystemExit("PyPI staging: unexpected distribution set")
+          print("PyPI staging: PASS (wheel and canonical sdist only)")
+          PY
+
+      - name: Store the immutable PyPI distributions
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: artifactproof-pypi-${{ github.sha }}
+          path: pypi-dist/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
+
+  publish:
+    name: Publish verified distributions
+    needs:
+      - verify-release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/p/artifactproof
+    permissions:
+      id-token: write
+    steps:
+      - name: Download the verified distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: artifactproof-pypi-${{ github.sha }}
+          path: dist/
+
+      - name: Publish to PyPI with Trusted Publishing
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: dist/
+          verify-metadata: true
+          skip-existing: false
+          attestations: true
+          print-hash: true
+          verbose: false
