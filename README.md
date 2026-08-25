@@ -2,7 +2,9 @@
 
 [![CI](https://github.com/MaxHu-xuan/artifactproof/actions/workflows/ci.yml/badge.svg)](https://github.com/MaxHu-xuan/artifactproof/actions/workflows/ci.yml)
 
-[中文说明](#中文说明) · [English overview](#english-overview) · [Technical reference](#technical-reference)
+中文导航：[中文说明](#中文说明) · [中文项目资料](#中文项目资料)
+
+English navigation: [English overview](#english-overview) · [Technical reference](#technical-reference)
 
 [ArtifactProof](https://github.com/MaxHu-xuan/artifactproof) · [TaskStateGuard](https://github.com/MaxHu-xuan/task-state-guard) · [ChatArchiveGuard](https://github.com/MaxHu-xuan/chat-archive-guard)
 
@@ -49,7 +51,8 @@ py -3 examples\run_demo.py
 ```
 
 最后一行表示篡改已被发现，不表示演示稿通过了视觉审查或已经真实送达。演示输入的生成
-方式和数据边界见 [`examples/README.md`](examples/README.md)。生成器不会覆盖已有路径；
+方式和数据边界见
+[`examples/README.md`](https://github.com/MaxHu-xuan/artifactproof/blob/main/examples/README.md)。生成器不会覆盖已有路径；
 若生成中途失败，它可能保留已经创建的纯合成文件，避免误删被并发进程替换的同名内容。
 
 ### 三个项目怎么选？
@@ -88,14 +91,14 @@ py -3 examples\run_demo.py
 
 #### 1. 安装并设置签名密钥
 
-需要 Python 3.11 或更高版本。0.1.0 尚未发布到 PyPI，请从已经审核的代码目录安装。
+需要 Python 3.11 或更高版本。对于已经发布到 PyPI 的版本，建议在独立虚拟环境中安装。
 
 Linux 或 macOS：
 
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-python -m pip install .
+python -m pip install artifactproof
 export ARTIFACTPROOF_SIGNING_KEY='base64:REPLACE_WITH_BASE64_KEY'
 ```
 
@@ -103,9 +106,44 @@ Windows PowerShell：
 
 ```powershell
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install .
+.\.venv\Scripts\python.exe -m pip install artifactproof
 $env:ARTIFACTPROOF_SIGNING_KEY = 'base64:REPLACE_WITH_BASE64_KEY'
 ```
+
+如果要测试开发版，请从已经审核的源码 checkout 根目录安装：Linux 或 macOS 使用
+`python -m pip install .`，Windows 使用
+`.\.venv\Scripts\python.exe -m pip install .`。
+
+离线使用时，请从同一个 GitHub Release 下载 wheel 与 `SHA256SUMS`，并先核验 wheel。
+在包含这两个文件的目录中，运行与你的平台对应的命令。
+
+Linux：
+
+```bash
+grep '  artifactproof-0.1.0-py3-none-any.whl$' SHA256SUMS | sha256sum --check -
+```
+
+macOS：
+
+```bash
+grep '  artifactproof-0.1.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check
+```
+
+Windows PowerShell：
+
+```powershell
+$wheel = '.\artifactproof-0.1.0-py3-none-any.whl'
+$entry = @(Get-Content .\SHA256SUMS | Where-Object {
+    $_ -match '^[0-9a-f]{64}  artifactproof-0\.1\.0-py3-none-any\.whl$'
+})
+if ($entry.Count -ne 1) { throw 'wheel checksum entry missing or duplicated' }
+$expected = ($entry[0] -split '  ', 2)[0]
+$actual = (Get-FileHash $wheel -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actual -ne $expected) { throw 'wheel SHA-256 mismatch' }
+```
+
+核验通过后，再使用 `--no-index --no-deps` 安装该 wheel；不要安装未经核验或来源不明的
+同名文件。
 
 请将占位值换成由至少 32 个随机字节生成的密钥，并保存在操作系统、CI 密钥库或团队使用
 的密钥管理工具中。不要把真实密钥写进代码、收据或命令参数。
@@ -185,8 +223,8 @@ Linux 和 macOS 上，新收据使用 `0600` 权限。Windows 没有相同的 PO
 误写成已经交付。
 
 HMAC 适合持有同一共享密钥的团队。它不能区分共享该密钥的不同成员，也不提供公开验证
-或不可否认性。保守的 ZIP 安全限制可能拒绝体积异常大的合法 PPTX。0.1.0 是预发布版本，
-命令行和 Python API 在 1.0 前仍可能调整。
+或不可否认性。保守的 ZIP 安全限制可能拒绝体积异常大的合法 PPTX。0.1.0 是首个 alpha
+版本，命令行和 Python API 在 1.0 前仍可能调整。
 
 ### 常见问题
 
@@ -229,6 +267,20 @@ HMAC 适合持有同一共享密钥的团队。它不能区分共享该密钥的
 
 不能。视觉审查、可访问性检查和事实核验需要其他工具或人工完成。可以把这些检查生成的
 报告作为证据，让收据明确它们对应的是哪一份 PPTX。
+
+## 中文项目资料
+
+### 项目状态
+
+0.1.0 是 ArtifactProof 的首个 alpha 版本。收据格式已有明确约定，但 Python API 与命令行
+界面在 1.0 前仍可能调整。版本发布后可从 PyPI 安装；开发或离线使用时，请选择已经审核的
+源码 checkout 或核验过的 Release wheel。
+
+项目代码从头独立实现，测试夹具全部使用合成数据，并采用 Apache-2.0 许可证。项目来源
+边界见
+[`PROVENANCE.md`](https://github.com/MaxHu-xuan/artifactproof/blob/main/PROVENANCE.md)，
+许可正文见
+[`LICENSE`](https://github.com/MaxHu-xuan/artifactproof/blob/main/LICENSE)。
 
 ## English Overview
 
@@ -278,7 +330,8 @@ Expected output:
 
 The last line means that the byte change was detected. It does not claim that
 the demo deck passed visual review or reached a recipient. See
-[`examples/README.md`](examples/README.md) for the generator and data boundary.
+[`examples/README.md`](https://github.com/MaxHu-xuan/artifactproof/blob/main/examples/README.md)
+for the generator and data boundary.
 The generator never overwrites an existing path. If generation fails partway,
 it may leave a synthetic output in place rather than risk deleting a path that
 another process replaced concurrently.
@@ -328,15 +381,15 @@ sensitive information.
 
 #### 1. Install and set a signing key
 
-Python 3.11 or newer is required. Version 0.1.0 is not yet published to PyPI;
-install it from a reviewed source checkout.
+Python 3.11 or newer is required. After a release is published to PyPI, install
+it in an isolated virtual environment.
 
 Linux or macOS:
 
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-python -m pip install .
+python -m pip install artifactproof
 export ARTIFACTPROOF_SIGNING_KEY='base64:REPLACE_WITH_BASE64_KEY'
 ```
 
@@ -344,9 +397,45 @@ Windows PowerShell:
 
 ```powershell
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install .
+.\.venv\Scripts\python.exe -m pip install artifactproof
 $env:ARTIFACTPROOF_SIGNING_KEY = 'base64:REPLACE_WITH_BASE64_KEY'
 ```
+
+To test a development version, install from the root of a reviewed source
+checkout: use `python -m pip install .` on Linux or macOS, or
+`.\.venv\Scripts\python.exe -m pip install .` on Windows.
+
+For offline use, download the wheel and `SHA256SUMS` from the same GitHub
+Release. In the directory containing both files, verify the wheel with the
+command for your platform.
+
+Linux:
+
+```bash
+grep '  artifactproof-0.1.0-py3-none-any.whl$' SHA256SUMS | sha256sum --check -
+```
+
+macOS:
+
+```bash
+grep '  artifactproof-0.1.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check
+```
+
+Windows PowerShell:
+
+```powershell
+$wheel = '.\artifactproof-0.1.0-py3-none-any.whl'
+$entry = @(Get-Content .\SHA256SUMS | Where-Object {
+    $_ -match '^[0-9a-f]{64}  artifactproof-0\.1\.0-py3-none-any\.whl$'
+})
+if ($entry.Count -ne 1) { throw 'wheel checksum entry missing or duplicated' }
+$expected = ($entry[0] -split '  ', 2)[0]
+$actual = (Get-FileHash $wheel -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actual -ne $expected) { throw 'wheel SHA-256 mismatch' }
+```
+
+After verification succeeds, install the wheel with `--no-index --no-deps`.
+Do not install an unverified file merely because it has the expected name.
 
 Replace the placeholder with a key derived from at least 32 random bytes. Keep
 the real key in an operating-system or CI secret store, or another secret
@@ -440,8 +529,8 @@ report is true or treat the presence of a report as proof of delivery.
 HMAC works for teams that share the same secret. It cannot distinguish between
 people who hold that key and does not provide public verification or
 non-repudiation. Conservative ZIP limits may reject an unusually large valid
-PPTX. Version 0.1.0 is a pre-release, so the CLI and Python API may change before
-1.0.
+PPTX. Version 0.1.0 is the initial alpha release, so the CLI and Python API may
+change before 1.0.
 
 ### Frequently asked questions
 
@@ -501,13 +590,17 @@ which exact PPTX they belong to.
 
 ### Project status
 
-Version 0.1.0 is a review-ready pre-release. The receipt schema is explicit,
-but the Python API and CLI may still change before 1.0. The package has not been
-published to PyPI; install it from a reviewed checkout or release artifact.
+Version 0.1.0 is ArtifactProof's initial alpha release. The receipt schema is
+explicit, but the Python API and CLI may still change before 1.0. After a
+release is published, install it from PyPI; for development or offline use,
+choose a reviewed source checkout or a verified Release wheel.
 
 This is a clean-room implementation written from scratch with synthetic test
 fixtures. It is licensed under the Apache License, Version 2.0. See
-[`LICENSE`](LICENSE).
+[`PROVENANCE.md`](https://github.com/MaxHu-xuan/artifactproof/blob/main/PROVENANCE.md)
+for the provenance boundary and
+[`LICENSE`](https://github.com/MaxHu-xuan/artifactproof/blob/main/LICENSE) for
+the license text.
 
 ### How receipt verification works
 
@@ -647,7 +740,8 @@ running on Windows.
 
 ### Receipt schema
 
-[`schema/receipt.schema.json`](schema/receipt.schema.json) is a JSON Schema
+[`schema/receipt.schema.json`](https://github.com/MaxHu-xuan/artifactproof/blob/main/schema/receipt.schema.json)
+is a JSON Schema
 2020-12 description of format `artifactproof.receipt.v1`. The implementation
 also performs strict shape checks without requiring a JSON Schema library.
 JSON Schema cannot require uniqueness by one object property, so the schema's
@@ -756,13 +850,18 @@ source tree.
 Audit findings contain only relative paths, stable codes, and counts. Matching
 content, credentials, personal data, and absolute input paths are never emitted.
 
-See [`RELEASING.md`](RELEASING.md) for copyable Linux, macOS, and Windows
-PowerShell build and source-archive canonicalization commands.
+See
+[`RELEASING.md`](https://github.com/MaxHu-xuan/artifactproof/blob/main/RELEASING.md)
+for copyable Linux, macOS, and Windows PowerShell build and source-archive
+canonicalization commands.
 
 CI runs all supported Python versions (3.11 through 3.14) on Ubuntu, plus the
 oldest and newest supported versions on macOS and Windows. Symlink tests are
 skipped only when the host does not permit creating symlinks; hard-link and
 path-alias checks remain active.
 
-See [THREAT_MODEL.md](THREAT_MODEL.md), [SECURITY.md](SECURITY.md), and
-[SUPPORT.md](SUPPORT.md) before embedding ArtifactProof into a delivery system.
+See
+[THREAT_MODEL.md](https://github.com/MaxHu-xuan/artifactproof/blob/main/THREAT_MODEL.md),
+[SECURITY.md](https://github.com/MaxHu-xuan/artifactproof/blob/main/SECURITY.md),
+and [SUPPORT.md](https://github.com/MaxHu-xuan/artifactproof/blob/main/SUPPORT.md)
+before embedding ArtifactProof into a delivery system.
